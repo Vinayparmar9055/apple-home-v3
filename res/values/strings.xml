@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Apple Home</string>
+    <string name="helper_name">Apple Home Helper</string>
+    <string name="helper_desc">Home button dabane par Apple Home launcher kholta hai.</string>
+</resources>
