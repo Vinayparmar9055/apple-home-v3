@@ -61,4 +61,24 @@ object Prefs {
     fun setDockCount(ctx: Context, value: Int) {
         sp(ctx).edit().putInt("dock_count", value).apply()
     }
+
+    // Folders: naam -> app pkg ki list
+    fun folders(ctx: Context): Map<String, List<String>> {
+        val s = sp(ctx).getString("folders", "") ?: ""
+        val out = LinkedHashMap<String, List<String>>()
+        s.split(";").filter { it.isNotBlank() }.forEach { part ->
+            val i = part.indexOf(':')
+            if (i > 0) {
+                val name = part.substring(0, i)
+                val pkgs = part.substring(i + 1).split(",").filter { it.isNotBlank() }
+                out[name] = pkgs
+            }
+        }
+        return out
+    }
+
+    fun setFolders(ctx: Context, map: Map<String, List<String>>) {
+        val s = map.entries.joinToString(";") { it.key + ":" + it.value.joinToString(",") }
+        sp(ctx).edit().putString("folders", s).apply()
+    }
 }
