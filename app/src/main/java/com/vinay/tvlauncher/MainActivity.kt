@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -24,7 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY }
+enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY, ANDROID }
 
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
@@ -56,7 +57,13 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
     }
     LaunchedEffect(homeTick) { screen = Screen.HOME }
 
-    BackHandler { if (screen != Screen.HOME) screen = Screen.HOME }
+    BackHandler {
+        when (screen) {
+            Screen.HOME -> {}
+            Screen.ANDROID -> screen = Screen.SETTINGS
+            else -> screen = Screen.HOME
+        }
+    }
 
     Box(
         Modifier
@@ -79,15 +86,21 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
             }
     ) {
         when (screen) {
-            Screen.HOME, Screen.CONTROL -> {
-                HomeScreen(
-                    apps = apps,
-                    favPkgs = effectiveFavs,
-                    onSettings = { screen = Screen.SETTINGS },
-                    onControl = { screen = Screen.CONTROL },
-                    onAllApps = { screen = Screen.APPS },
-                    onLaunch = { launchApp(ctx, it) }
-                )
+            Screen.HOME, Screen.CONTROL, Screen.SETTINGS -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .focusProperties { canFocus = screen != Screen.SETTINGS }
+                ) {
+                    HomeScreen(
+                        apps = apps,
+                        favPkgs = effectiveFavs,
+                        onSettings = { screen = Screen.SETTINGS },
+                        onControl = { screen = Screen.CONTROL },
+                        onAllApps = { screen = Screen.APPS },
+                        onLaunch = { launchApp(ctx, it) }
+                    )
+                }
                 if (screen == Screen.CONTROL) {
                     ControlCenter(
                         dark = dark,
@@ -97,6 +110,17 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
                         },
                         onStandBy = { screen = Screen.STANDBY },
                         onSettings = { screen = Screen.SETTINGS },
+                        onClose = { screen = Screen.HOME }
+                    )
+                }
+                if (screen == Screen.SETTINGS) {
+                    SettingsPanel(
+                        dark = dark,
+                        onDarkChange = {
+                            dark = it
+                            Prefs.setDark(ctx, it)
+                        },
+                        onAndroidSettings = { screen = Screen.ANDROID },
                         onClose = { screen = Screen.HOME }
                     )
                 }
@@ -111,9 +135,9 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
                 onLaunch = { launchApp(ctx, it) },
                 onBack = { screen = Screen.HOME }
             )
-            Screen.SETTINGS -> ActionScreen(
-                "Settings", settingsActions, 3
-            ) { screen = Screen.HOME }
+            Screen.ANDROID -> ActionScreen(
+                "Android Settings", settingsActions, 3
+            ) { screen = Screen.SETTINGS }
             Screen.STANDBY -> StandByScreen { screen = Screen.HOME }
         }
     }
