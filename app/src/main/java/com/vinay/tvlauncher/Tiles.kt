@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,15 +37,49 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val TileShape = RoundedCornerShape(18.dp)
+private val TileShape = RoundedCornerShape(16.dp)
+
+private val TileTop = Color(0xFF3C3C42)
+private val TileBottom = Color(0xFF131316)
+private val TileTopFocus = Color(0xFF55555C)
+private val TileBottomFocus = Color(0xFF1F1F23)
 
 private fun Modifier.tileSurface(focused: Boolean): Modifier = this
     .clip(TileShape)
-    .background(Brush.verticalGradient(listOf(Color(0xFF3A3A40), Color(0xFF1C1C20))))
-    .then(
-        if (focused) Modifier.border(2.dp, Color.White.copy(alpha = 0.85f), TileShape)
-        else Modifier
+    .background(
+        Brush.verticalGradient(
+            if (focused) listOf(TileTopFocus, TileBottomFocus)
+            else listOf(TileTop, TileBottom)
+        )
     )
+    .then(
+        if (focused) {
+            Modifier.border(2.5.dp, Color.White.copy(alpha = 0.9f), TileShape)
+        } else {
+            Modifier.border(
+                1.dp,
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.03f))
+                ),
+                TileShape
+            )
+        }
+    )
+
+@Composable
+private fun TileGloss() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = 0.13f),
+                    0.45f to Color.Transparent,
+                    1f to Color.Transparent
+                )
+            )
+    )
+}
 
 @Composable
 fun AppRectTile(
@@ -76,6 +111,7 @@ fun AppRectTile(
             Modifier.size(width, height).tileSurface(focused),
             contentAlignment = Alignment.Center
         ) {
+            TileGloss()
             Image(item.icon, contentDescription = item.label, modifier = Modifier.size(iconSize))
             if (selected) {
                 Box(
@@ -125,6 +161,7 @@ fun AllAppsTile(onClick: () -> Unit, width: Dp, height: Dp) {
             Modifier.size(width, height).tileSurface(focused),
             contentAlignment = Alignment.Center
         ) {
+            TileGloss()
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 repeat(2) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
