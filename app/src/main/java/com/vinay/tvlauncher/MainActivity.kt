@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -56,7 +57,13 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
     var dark by remember { mutableStateOf(Prefs.dark(ctx)) }
     var setupDone by remember { mutableStateOf(Prefs.setupDone(ctx)) }
     var dockCount by remember { mutableStateOf(Prefs.dockCount(ctx)) }
+    var wallTick by remember { mutableStateOf(0) }
     val effectiveFavs = favs ?: defaultFavs(apps)
+
+    val bmps by produceState<WallBitmaps?>(initialValue = null, wallTick) {
+        value = withContext(Dispatchers.IO) { Wallpaper.loadBitmaps(ctx) }
+    }
+    val wallSettings = remember(wallTick) { Wallpaper.settings(ctx) }
 
     LaunchedEffect(resumeTick) {
         apps = withContext(Dispatchers.IO) { loadApps(ctx) }
@@ -94,6 +101,23 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
                 }
             }
     ) {
+        val b = bmps
+        if (b != null && setupDone) {
+            val showSharp = screen == Screen.HOME
+            WallpaperLayer(
+                sharp = b.sharp,
+                blurBg = b.blur,
+                s = wallSettings,
+                blurred = !showSharp,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = if (showSharp) 0.30f else 0.45f))
+            )
+        }
+
         if (!setupDone) {
             SetupWizard(
                 dark = dark,
@@ -151,6 +175,7 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
                                 setupDone = false
                                 screen = Screen.HOME
                             },
+                            onWallpaperChanged = { wallTick++ },
                             onClose = { screen = Screen.HOME }
                         )
                     }
