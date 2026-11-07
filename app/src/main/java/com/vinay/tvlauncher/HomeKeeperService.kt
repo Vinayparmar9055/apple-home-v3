@@ -19,6 +19,12 @@ class HomeKeeperService : AccessibilityService() {
         "com.google.android.apps.tv.launcherx"
     )
 
+    // Ye packages recent list me nahi judte
+    private val ignoredForRecents = setOf(
+        "android",
+        "com.android.systemui"
+    )
+
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
 
@@ -30,14 +36,31 @@ class HomeKeeperService : AccessibilityService() {
         // Remap chun'ne ke waqt button app tak jaane do
         if (RemapState.capturing) return false
 
-        val action = RemapStore.get(this, code) ?: return false
+        val action = RemapStore.get(this, code)
+        if (action == null) {
+            // Asli App Switch button ho to Recent Apps kholo
+            if (code == KeyEvent.KEYCODE_APP_SWITCH) {
+                if (event.action == KeyEvent.ACTION_UP) openRecents()
+                return true
+            }
+            return false
+        }
         if (event.action == KeyEvent.ACTION_UP) runAction(action)
         return true
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
-        if (pkg in stockLaunchers) openLauncher()
+        if (pkg in stockLaunchers) {
+            openLauncher()
+            return
+        }
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            pkg != packageName &&
+            pkg !in ignoredForRecents
+        ) {
+            RecentStore.push(this, pkg)
+        }
     }
 
     override fun onInterrupt() {}
@@ -47,7 +70,7 @@ class HomeKeeperService : AccessibilityService() {
             when {
                 action == "home" -> openLauncher()
                 action == "back" -> performGlobalAction(GLOBAL_ACTION_BACK)
-                action == "recents" -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+                action == "recents" -> openRecents()
                 action == "playpause" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
                 action == "mute" -> {
                     val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -89,6 +112,21 @@ class HomeKeeperService : AccessibilityService() {
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
             )
+        )
+    }
+
+    private fun openRecents() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOpen < 800) return
+        lastOpen = now
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra("recents", true)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
         )
     }
 }
