@@ -132,12 +132,18 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
                     }
                     if (screen == Screen.SETTINGS) {
                         SettingsPanel(
+                            apps = apps,
                             dark = dark,
                             onDarkChange = {
                                 dark = it
                                 Prefs.setDark(ctx, it)
                             },
                             onAndroidSettings = { screen = Screen.ANDROID },
+                            onRunSetup = {
+                                Prefs.setSetupDone(ctx, false)
+                                setupDone = false
+                                screen = Screen.HOME
+                            },
                             onClose = { screen = Screen.HOME }
                         )
                     }
