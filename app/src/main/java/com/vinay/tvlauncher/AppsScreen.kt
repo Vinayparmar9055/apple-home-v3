@@ -60,10 +60,10 @@ fun AppsScreen(
         }
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(5),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 20.dp),
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 20.dp, horizontal = 8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(apps, key = { it.pkg }) { app ->
@@ -79,9 +79,9 @@ fun AppsScreen(
                                 onLaunch(app)
                             }
                         },
-                        width = 148.dp,
-                        height = 92.dp,
-                        iconSize = 56.dp,
+                        width = 116.dp,
+                        height = 76.dp,
+                        iconSize = 46.dp,
                         selected = editing && isFav
                     )
                 }
