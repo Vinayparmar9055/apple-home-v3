@@ -50,6 +50,8 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var favs by remember { mutableStateOf(Prefs.favourites(ctx)) }
     var dark by remember { mutableStateOf(Prefs.dark(ctx)) }
+    var setupDone by remember { mutableStateOf(Prefs.setupDone(ctx)) }
+    var dockCount by remember { mutableStateOf(Prefs.dockCount(ctx)) }
     val effectiveFavs = favs ?: defaultFavs(apps)
 
     LaunchedEffect(resumeTick) {
@@ -85,60 +87,76 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
                 }
             }
     ) {
-        when (screen) {
-            Screen.HOME, Screen.CONTROL, Screen.SETTINGS -> {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .focusProperties { canFocus = screen != Screen.SETTINGS }
-                ) {
-                    HomeScreen(
-                        apps = apps,
-                        favPkgs = effectiveFavs,
-                        onSettings = { screen = Screen.SETTINGS },
-                        onControl = { screen = Screen.CONTROL },
-                        onAllApps = { screen = Screen.APPS },
-                        onLaunch = { launchApp(ctx, it) }
-                    )
-                }
-                if (screen == Screen.CONTROL) {
-                    ControlCenter(
-                        dark = dark,
-                        onToggleDark = {
-                            dark = !dark
-                            Prefs.setDark(ctx, dark)
-                        },
-                        onStandBy = { screen = Screen.STANDBY },
-                        onSettings = { screen = Screen.SETTINGS },
-                        onClose = { screen = Screen.HOME }
-                    )
-                }
-                if (screen == Screen.SETTINGS) {
-                    SettingsPanel(
-                        dark = dark,
-                        onDarkChange = {
-                            dark = it
-                            Prefs.setDark(ctx, it)
-                        },
-                        onAndroidSettings = { screen = Screen.ANDROID },
-                        onClose = { screen = Screen.HOME }
-                    )
-                }
-            }
-            Screen.APPS -> AppsScreen(
-                apps = apps,
-                favPkgs = effectiveFavs,
-                onFavsChange = {
-                    favs = it
-                    Prefs.setFavourites(ctx, it)
+        if (!setupDone) {
+            SetupWizard(
+                dark = dark,
+                onDarkChange = {
+                    dark = it
+                    Prefs.setDark(ctx, it)
                 },
-                onLaunch = { launchApp(ctx, it) },
-                onBack = { screen = Screen.HOME }
+                onFinish = {
+                    Prefs.setSetupDone(ctx, true)
+                    dockCount = Prefs.dockCount(ctx)
+                    setupDone = true
+                    screen = Screen.HOME
+                }
             )
-            Screen.ANDROID -> ActionScreen(
-                "Android Settings", settingsActions, 3
-            ) { screen = Screen.SETTINGS }
-            Screen.STANDBY -> StandByScreen { screen = Screen.HOME }
+        } else {
+            when (screen) {
+                Screen.HOME, Screen.CONTROL, Screen.SETTINGS -> {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .focusProperties { canFocus = screen != Screen.SETTINGS }
+                    ) {
+                        HomeScreen(
+                            apps = apps,
+                            favPkgs = effectiveFavs.take(dockCount),
+                            onSettings = { screen = Screen.SETTINGS },
+                            onControl = { screen = Screen.CONTROL },
+                            onAllApps = { screen = Screen.APPS },
+                            onLaunch = { launchApp(ctx, it) }
+                        )
+                    }
+                    if (screen == Screen.CONTROL) {
+                        ControlCenter(
+                            dark = dark,
+                            onToggleDark = {
+                                dark = !dark
+                                Prefs.setDark(ctx, dark)
+                            },
+                            onStandBy = { screen = Screen.STANDBY },
+                            onSettings = { screen = Screen.SETTINGS },
+                            onClose = { screen = Screen.HOME }
+                        )
+                    }
+                    if (screen == Screen.SETTINGS) {
+                        SettingsPanel(
+                            dark = dark,
+                            onDarkChange = {
+                                dark = it
+                                Prefs.setDark(ctx, it)
+                            },
+                            onAndroidSettings = { screen = Screen.ANDROID },
+                            onClose = { screen = Screen.HOME }
+                        )
+                    }
+                }
+                Screen.APPS -> AppsScreen(
+                    apps = apps,
+                    favPkgs = effectiveFavs,
+                    onFavsChange = {
+                        favs = it
+                        Prefs.setFavourites(ctx, it)
+                    },
+                    onLaunch = { launchApp(ctx, it) },
+                    onBack = { screen = Screen.HOME }
+                )
+                Screen.ANDROID -> ActionScreen(
+                    "Android Settings", settingsActions, 3
+                ) { screen = Screen.SETTINGS }
+                Screen.STANDBY -> StandByScreen { screen = Screen.HOME }
+            }
         }
     }
 }
