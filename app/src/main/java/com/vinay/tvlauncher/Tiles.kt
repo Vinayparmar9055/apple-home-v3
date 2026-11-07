@@ -1,14 +1,17 @@
 package com.vinay.tvlauncher
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -81,6 +84,7 @@ private fun TileGloss() {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppRectTile(
     item: AppItem,
@@ -89,7 +93,8 @@ fun AppRectTile(
     height: Dp,
     iconSize: Dp,
     requester: FocusRequester? = null,
-    selected: Boolean = false
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val s = focusScale(focused, 1.12f)
@@ -98,13 +103,18 @@ fun AppRectTile(
         label = "labelAlpha"
     ).value
     val base = if (requester != null) Modifier.focusRequester(requester) else Modifier
+    val click = if (onLongClick != null) {
+        Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    } else {
+        Modifier.clickable(onClick = onClick)
+    }
 
     Column(
         base
             .width(width)
             .graphicsLayer { scaleX = s; scaleY = s }
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick),
+            .then(click),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -136,6 +146,58 @@ fun AppRectTile(
             modifier = Modifier
                 .height(22.dp)
                 .graphicsLayer { alpha = labelAlpha }
+        )
+    }
+}
+
+@Composable
+fun FolderTile(
+    name: String,
+    apps: List<AppItem>,
+    onClick: () -> Unit,
+    width: Dp,
+    height: Dp
+) {
+    var focused by remember { mutableStateOf(false) }
+    val s = focusScale(focused, 1.12f)
+    val shown = apps.take(4)
+
+    Column(
+        Modifier
+            .width(width)
+            .graphicsLayer { scaleX = s; scaleY = s }
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(width, height).tileSurface(focused),
+            contentAlignment = Alignment.Center
+        ) {
+            TileGloss()
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (r in 0 until 2) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (c in 0 until 2) {
+                            val a = shown.getOrNull(r * 2 + c)
+                            if (a != null) {
+                                Image(a.icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                            } else {
+                                Spacer(Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            name,
+            color = Color.White,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.height(22.dp)
         )
     }
 }
