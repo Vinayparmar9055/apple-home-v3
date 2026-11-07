@@ -25,16 +25,20 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY, ANDROID }
+enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY, ANDROID, RECENTS }
 
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
     private var homeTick by mutableIntStateOf(0)
+    private var recentsTick by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        addOnNewIntentListener { homeTick++ }
-        setContent { LauncherApp(resumeTick, homeTick) }
+        addOnNewIntentListener { i ->
+            if (i.getBooleanExtra("recents", false)) recentsTick++ else homeTick++
+        }
+        if (intent?.getBooleanExtra("recents", false) == true) recentsTick++
+        setContent { LauncherApp(resumeTick, homeTick, recentsTick) }
     }
 
     override fun onResume() {
@@ -44,7 +48,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LauncherApp(resumeTick: Int, homeTick: Int) {
+fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
     val ctx = LocalContext.current
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
@@ -58,6 +62,9 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
         apps = withContext(Dispatchers.IO) { loadApps(ctx) }
     }
     LaunchedEffect(homeTick) { screen = Screen.HOME }
+    LaunchedEffect(recentsTick) {
+        if (recentsTick > 0) screen = Screen.RECENTS
+    }
 
     BackHandler {
         when (screen) {
@@ -162,6 +169,11 @@ fun LauncherApp(resumeTick: Int, homeTick: Int) {
                     "Android Settings", settingsActions, 3
                 ) { screen = Screen.SETTINGS }
                 Screen.STANDBY -> StandByScreen { screen = Screen.HOME }
+                Screen.RECENTS -> RecentAppsScreen(
+                    apps = apps,
+                    onLaunch = { launchApp(ctx, it) },
+                    onBack = { screen = Screen.HOME }
+                )
             }
         }
     }
