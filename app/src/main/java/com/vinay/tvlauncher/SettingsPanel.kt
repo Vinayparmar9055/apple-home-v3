@@ -154,13 +154,16 @@ private fun SLabel(text: String) {
 
 @Composable
 fun SettingsPanel(
+    apps: List<AppItem>,
     dark: Boolean,
     onDarkChange: (Boolean) -> Unit,
     onAndroidSettings: () -> Unit,
+    onRunSetup: () -> Unit,
     onClose: () -> Unit
 ) {
     val ctx = LocalContext.current
     var page by remember { mutableStateOf("main") }
+    var showRemap by remember { mutableStateOf(false) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
@@ -174,9 +177,11 @@ fun SettingsPanel(
     }
 
     val first = remember(page) { FocusRequester() }
-    LaunchedEffect(page) {
-        delay(60)
-        runCatching { first.requestFocus() }
+    LaunchedEffect(page, showRemap) {
+        if (!showRemap) {
+            delay(60)
+            runCatching { first.requestFocus() }
+        }
     }
 
     Box(
@@ -213,6 +218,10 @@ fun SettingsPanel(
                 "main" -> {
                     SLabel("Launcher")
                     SRow("Appearance", "›", requester = first) { page = "appearance" }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Button Remap", "›") { showRemap = true }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Run Setup Again", "›") { onRunSetup() }
                     Spacer(Modifier.height(8.dp))
                     SLabel("TV")
                     SRow("Android Settings", "›") { onAndroidSettings() }
@@ -266,5 +275,9 @@ fun SettingsPanel(
                 }
             }
         }
+    }
+
+    if (showRemap) {
+        ButtonRemapScreen(apps = apps, onClose = { showRemap = false })
     }
 }
