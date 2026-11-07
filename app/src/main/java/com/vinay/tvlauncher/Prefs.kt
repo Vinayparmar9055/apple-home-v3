@@ -20,4 +20,25 @@ object Prefs {
     fun setDark(ctx: Context, value: Boolean) {
         sp(ctx).edit().putBoolean("dark", value).apply()
     }
+
+    // 0 = Liquid Glass, 1 = Frosted Glass
+    fun glassStyle(ctx: Context): Int = sp(ctx).getInt("glass_style", 0)
+
+    fun setGlassStyle(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("glass_style", value).apply()
+    }
+
+    // 0..10
+    fun blur(ctx: Context): Int = sp(ctx).getInt("blur", 6)
+
+    fun setBlur(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("blur", value).apply()
+    }
+
+    // 0 = Two Widgets, 1 = Analogue, 2 = Float, 3 = Digital
+    fun standbyStyle(ctx: Context): Int = sp(ctx).getInt("standby_style", 0)
+
+    fun setStandbyStyle(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("standby_style", value).apply()
+    }
 }
