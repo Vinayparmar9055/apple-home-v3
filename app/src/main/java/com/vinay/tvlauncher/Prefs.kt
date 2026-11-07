@@ -41,4 +41,24 @@ object Prefs {
     fun setStandbyStyle(ctx: Context, value: Int) {
         sp(ctx).edit().putInt("standby_style", value).apply()
     }
+
+    fun setupDone(ctx: Context): Boolean = sp(ctx).getBoolean("setup_done", false)
+
+    fun setSetupDone(ctx: Context, value: Boolean) {
+        sp(ctx).edit().putBoolean("setup_done", value).apply()
+    }
+
+    // 0 = tvOS Icons, 1 = Original Banners
+    fun iconStyle(ctx: Context): Int = sp(ctx).getInt("icon_style", 0)
+
+    fun setIconStyle(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("icon_style", value).apply()
+    }
+
+    // 4, 5 ya 6
+    fun dockCount(ctx: Context): Int = sp(ctx).getInt("dock_count", 6)
+
+    fun setDockCount(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("dock_count", value).apply()
+    }
 }
