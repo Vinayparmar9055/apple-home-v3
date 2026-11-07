@@ -125,24 +125,24 @@ fun Dock(
     Box(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(28.dp), false)
-            .padding(vertical = 16.dp)
+            .glass(RoundedCornerShape(26.dp), false)
+            .padding(vertical = 14.dp)
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
         ) {
             itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
                 AppRectTile(
                     item = app,
                     onClick = { onLaunch(app) },
-                    width = 104.dp,
-                    height = 72.dp,
-                    iconSize = 44.dp,
+                    width = 112.dp,
+                    height = 76.dp,
+                    iconSize = 46.dp,
                     requester = if (index == 0) first else null
                 )
             }
-            item { AllAppsTile(onAllApps, 104.dp, 72.dp) }
+            item { AllAppsTile(onAllApps, 112.dp, 76.dp) }
         }
     }
 }
