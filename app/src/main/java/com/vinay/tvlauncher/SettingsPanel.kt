@@ -1,6 +1,9 @@
 package com.vinay.tvlauncher
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +43,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val StandByNames = listOf("Two Widgets", "Analogue", "Float", "Digital")
 
@@ -159,26 +166,45 @@ fun SettingsPanel(
     onDarkChange: (Boolean) -> Unit,
     onAndroidSettings: () -> Unit,
     onRunSetup: () -> Unit,
+    onWallpaperChanged: () -> Unit,
     onClose: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf("main") }
     var showRemap by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
+    var hasWall by remember { mutableStateOf(Wallpaper.exists(ctx)) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { Wallpaper.save(ctx, uri) }
+                if (ok) {
+                    hasWall = true
+                    onWallpaperChanged()
+                    showEditor = true
+                } else {
+                    Toast.makeText(ctx, "Ye photo load nahi ho payi", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     BackHandler {
         when (page) {
             "main" -> onClose()
-            "glass", "standby" -> page = "appearance"
+            "glass", "standby", "wallpaper" -> page = "appearance"
             else -> page = "main"
         }
     }
 
     val first = remember(page) { FocusRequester() }
-    LaunchedEffect(page, showRemap) {
-        if (!showRemap) {
+    LaunchedEffect(page, showRemap, showEditor) {
+        if (!showRemap && !showEditor) {
             delay(60)
             runCatching { first.requestFocus() }
         }
@@ -203,6 +229,7 @@ fun SettingsPanel(
                 "main" -> "Settings"
                 "appearance" -> "Appearance"
                 "glass" -> "Glass Style"
+                "wallpaper" -> "Wallpaper"
                 else -> "StandBy Style"
             }
             Text(
@@ -237,6 +264,8 @@ fun SettingsPanel(
                     Spacer(Modifier.height(8.dp))
                     SRow("Icon Pack", "tvOS ›") { }
                     Spacer(Modifier.height(8.dp))
+                    SRow("Wallpaper", if (hasWall) "Custom ›" else "Default ›") { page = "wallpaper" }
+                    Spacer(Modifier.height(8.dp))
                     SRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
                     SLabel("StandBy")
                     SRow("Style", StandByNames[standby] + " ›") { page = "standby" }
@@ -257,6 +286,36 @@ fun SettingsPanel(
                     BlurRow(blur, remember { FocusRequester() }) {
                         blur = it
                         Prefs.setBlur(ctx, it)
+                        onWallpaperChanged()
+                    }
+                }
+
+                "wallpaper" -> {
+                    SLabel("Gallery se photo chuno")
+                    SRow("Choose from Gallery", requester = first) {
+                        try {
+                            picker.launch("image/*")
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                ctx,
+                                "TV me gallery/file manager nahi mila",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Adjust Photo", "Rotate, Zoom ›") {
+                        if (hasWall) {
+                            showEditor = true
+                        } else {
+                            Toast.makeText(ctx, "Pehle photo chuno", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Remove Wallpaper", if (hasWall) "" else "Koi nahi") {
+                        Wallpaper.clear(ctx)
+                        hasWall = false
+                        onWallpaperChanged()
                     }
                 }
 
@@ -279,5 +338,11 @@ fun SettingsPanel(
 
     if (showRemap) {
         ButtonRemapScreen(apps = apps, onClose = { showRemap = false })
+    }
+    if (showEditor) {
+        WallpaperEditor(
+            onChanged = { onWallpaperChanged() },
+            onClose = { showEditor = false }
+        )
     }
 }
