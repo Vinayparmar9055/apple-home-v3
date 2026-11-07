@@ -39,7 +39,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -259,8 +258,8 @@ fun ButtonRemapScreen(apps: List<AppItem>, onClose: () -> Unit) {
                             fontSize = 15.sp,
                             modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 8.dp)
                         )
-                        StandardActions.forEachIndexed { i, (key, label) ->
-                            RRow(label, requester = if (i == 0) first else null) { choose(key) }
+                        StandardActions.forEachIndexed { i, (actionKey, label) ->
+                            RRow(label, requester = if (i == 0) first else null) { choose(actionKey) }
                         }
                         if (pickKey in mappings) {
                             RRow("Remove mapping") {
