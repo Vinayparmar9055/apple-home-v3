@@ -40,19 +40,34 @@ import androidx.compose.ui.unit.sp
 
 val Navy = Color(0xFF0A0F1D)
 
+private val GlassTop = Color(0xFF3A3A40).copy(alpha = 0.80f)
+private val GlassBottom = Color(0xFF131316).copy(alpha = 0.88f)
+private val GlassTopFocus = Color(0xFF5A5A62).copy(alpha = 0.92f)
+private val GlassBottomFocus = Color(0xFF222226).copy(alpha = 0.92f)
+
 fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = this
     .clip(shape)
     .background(
         Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = if (focused) 0.30f else 0.14f),
-                Color.White.copy(alpha = if (focused) 0.14f else 0.05f)
-            )
+            if (focused) listOf(GlassTopFocus, GlassBottomFocus)
+            else listOf(GlassTop, GlassBottom)
+        )
+    )
+    .background(
+        Brush.verticalGradient(
+            0f to Color.White.copy(alpha = if (focused) 0.16f else 0.10f),
+            0.5f to Color.Transparent,
+            1f to Color.Transparent
         )
     )
     .border(
         if (focused) 2.dp else 1.dp,
-        Color.White.copy(alpha = if (focused) 0.9f else 0.22f),
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = if (focused) 0.95f else 0.22f),
+                Color.White.copy(alpha = if (focused) 0.70f else 0.04f)
+            )
+        ),
         shape
     )
 
