@@ -70,6 +70,20 @@ private fun openSafe(ctx: Context, intent: Intent) {
     }
 }
 
+@Suppress("DEPRECATION")
+private fun wifiLabel(ctx: Context): String {
+    return runCatching {
+        val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        if (!wm.isWifiEnabled) {
+            "Off"
+        } else {
+            val raw = wm.connectionInfo?.ssid ?: ""
+            val ssid = raw.removePrefix("\"").removeSuffix("\"")
+            if (ssid.isBlank() || ssid.contains("unknown ssid", ignoreCase = true)) "On" else ssid
+        }
+    }.getOrDefault("Off")
+}
+
 @Composable
 private fun CcTile(
     modifier: Modifier,
@@ -90,7 +104,8 @@ private fun CcTile(
             .graphicsLayer { scaleX = s; scaleY = s }
             .onFocusChanged { focused = it.isFocused }
             .clip(shape)
-            .background(if (hi) Color.White else Color.White.copy(alpha = 0.14f))
+            .background(if (hi) Color.White else Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Color.White.copy(alpha = if (hi) 0f else 0.28f), shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) { content(fg) }
@@ -104,7 +119,7 @@ private fun StatusTile(
     sub: String?,
     onClick: () -> Unit
 ) {
-    CcTile(modifier, RoundedCornerShape(22.dp), onClick) { fg ->
+    CcTile(modifier, RoundedCornerShape(50), onClick) { fg ->
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -114,7 +129,7 @@ private fun StatusTile(
             Column {
                 Text(title, color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 if (sub != null) {
-                    Text(sub, color = fg.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text(sub, color = fg.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1)
                 }
             }
         }
@@ -144,11 +159,7 @@ fun ControlCenter(
         }
     }
     val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    val wifiOn = remember {
-        runCatching {
-            (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled
-        }.getOrDefault(false)
-    }
+    val wifiText = remember { wifiLabel(ctx) }
     val btOn = remember {
         runCatching { BluetoothAdapter.getDefaultAdapter()?.isEnabled == true }.getOrDefault(false)
     }
@@ -173,9 +184,7 @@ fun ControlCenter(
             Column(
                 Modifier
                     .width(420.dp)
-                    .clip(panel)
-                    .background(Color(0xE61E1E22))
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), panel)
+                    .glass(panel, false)
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -208,7 +217,7 @@ fun ControlCenter(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StatusTile(
                             Modifier.width(224.dp).height(70.dp),
-                            Icons.Rounded.Wifi, "Wi-Fi", if (wifiOn) "On" else "Off"
+                            Icons.Rounded.Wifi, "Wi-Fi", wifiText
                         ) { openSafe(ctx, Intent(Settings.ACTION_WIFI_SETTINGS)) }
                         StatusTile(
                             Modifier.width(224.dp).height(70.dp),
