@@ -11,10 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -27,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +34,7 @@ import java.util.Locale
 
 const val USER_NAME = "Vinay"
 
-private fun defaultFavs(apps: List<AppItem>): List<String> {
+fun defaultFavs(apps: List<AppItem>): List<String> {
     val preferred = listOf(
         "com.google.android.youtube.tv",
         "com.amazon.amazonvideo.livingroom",
@@ -54,11 +49,12 @@ private fun defaultFavs(apps: List<AppItem>): List<String> {
 @Composable
 fun HomeScreen(
     apps: List<AppItem>,
+    favPkgs: List<String>,
     onSettings: () -> Unit,
     onControl: () -> Unit,
+    onAllApps: () -> Unit,
     onLaunch: (AppItem) -> Unit
 ) {
-    val ctx = LocalContext.current
     val now by produceState(initialValue = Date()) {
         while (true) {
             value = Date()
@@ -75,11 +71,7 @@ fun HomeScreen(
         else -> "Good night"
     }
 
-    val favPkgs = remember(apps) {
-        Prefs.favourites(ctx).ifEmpty { defaultFavs(apps) }
-    }
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
-
     val first = remember { FocusRequester() }
     LaunchedEffect(apps.isNotEmpty()) {
         if (apps.isNotEmpty()) {
@@ -91,7 +83,7 @@ fun HomeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .padding(start = 48.dp, end = 48.dp, top = 28.dp)
+            .padding(start = 48.dp, end = 48.dp, top = 28.dp, bottom = 24.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column {
@@ -117,68 +109,40 @@ fun HomeScreen(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.weight(1f))
 
-        if (apps.isEmpty()) {
-            Text("Apps load ho rahe hain...", color = Color.White.copy(alpha = 0.6f), fontSize = 18.sp)
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(6),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                if (favApps.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        FavShelf(favApps, onLaunch, first)
-                    }
-                }
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(
-                        "All Apps",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(start = 8.dp, top = 8.dp)
-                    )
-                }
-                items(apps, key = { it.pkg }) { app ->
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                        AppIconTile(
-                            item = app,
-                            onClick = { onLaunch(app) },
-                            requester = if (favApps.isEmpty() && app == apps.first()) first else null
-                        )
-                    }
-                }
-            }
-        }
+        Dock(favApps, onLaunch, onAllApps, first)
     }
 }
 
 @Composable
-fun FavShelf(
+fun Dock(
     favs: List<AppItem>,
     onLaunch: (AppItem) -> Unit,
+    onAllApps: () -> Unit,
     first: FocusRequester
 ) {
     Box(
         Modifier
             .fillMaxWidth()
             .glass(RoundedCornerShape(28.dp), false)
-            .padding(vertical = 14.dp)
+            .padding(vertical = 16.dp)
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 20.dp)
         ) {
             itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
-                AppIconTile(
+                AppRectTile(
                     item = app,
                     onClick = { onLaunch(app) },
+                    width = 104.dp,
+                    height = 72.dp,
+                    iconSize = 44.dp,
                     requester = if (index == 0) first else null
                 )
             }
+            item { AllAppsTile(onAllApps, 104.dp, 72.dp) }
         }
     }
 }
