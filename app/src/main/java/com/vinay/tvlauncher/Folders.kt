@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
@@ -110,6 +111,7 @@ fun AppContextMenu(
     folderNames: List<String>,
     currentFolder: String?,
     onToggleFav: () -> Unit,
+    onMoveTile: () -> Unit,
     onMoveToFolder: (String) -> Unit,
     onRemoveFromFolder: () -> Unit,
     onNewFolder: () -> Unit,
@@ -142,6 +144,7 @@ fun AppContextMenu(
                 if (isFav) "Remove from Favourites" else "Add to Favourites",
                 requester = first
             ) { onToggleFav() }
+            MenuRow(Icons.Rounded.GridView, "Move tile") { onMoveTile() }
             folderNames.filter { it != currentFolder }.forEach { name ->
                 MenuRow(Icons.Rounded.Folder, "Move to \"$name\"") { onMoveToFolder(name) }
             }
