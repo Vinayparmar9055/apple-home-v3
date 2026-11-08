@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,6 +48,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 private fun PRow(
@@ -83,7 +87,7 @@ private fun PRow(
 }
 
 @Composable
- fun CityPicker(onClose: () -> Unit) {
+fun CityPicker(onClose: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var stage by remember { mutableStateOf("list") }
@@ -183,40 +187,18 @@ private fun PRow(
 }
 
 @Composable
-private fun RangeBar(day: DayW, gMin: Int, gMax: Int) {
-    val span = (gMax - gMin).coerceAtLeast(1).toFloat()
-    val s = ((day.min - gMin) / span).coerceIn(0f, 1f)
-    val e = ((day.max - gMin) / span).coerceIn(0f, 1f)
-    val len = (e - s).coerceAtLeast(0.05f)
-    val rest = (1f - s - len).coerceAtLeast(0.001f)
-    Row(
-        Modifier
-            .width(130.dp)
-            .height(5.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color.White.copy(alpha = 0.15f))
-    ) {
-        Spacer(Modifier.weight(s.coerceAtLeast(0.001f)))
-        Box(
-            Modifier
-                .weight(len)
-                .height(5.dp)
-                .background(Color(0xFFFFB340))
-        )
-        Spacer(Modifier.weight(rest))
-    }
-}
-
-@Composable
-private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -> Unit) {
+private fun WeatherPopup(
+    d: WeatherData,
+    timeText: String,
+    dateText: String,
+    onChangeCity: () -> Unit,
+    onClose: () -> Unit
+) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { first.requestFocus() }
     }
-    val days = d.days.take(5)
-    val gMin = days.minOfOrNull { it.min } ?: 0
-    val gMax = days.maxOfOrNull { it.max } ?: 1
 
     Dialog(
         onDismissRequest = onClose,
@@ -237,15 +219,29 @@ private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -
                     .padding(20.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        d.city,
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column {
+                        Text(
+                            timeText,
+                            color = Color.White,
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.Light
+                        )
+                        Text(
+                            dateText,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                    }
                     Spacer(Modifier.weight(1f))
                     GlassButton("Change City", onChangeCity, Modifier.focusRequester(first))
                 }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    d.city,
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Column(
                     Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -266,76 +262,15 @@ private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 15.sp
                     )
-                }
-
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    Text(
-                        "HOURLY FORECAST",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.sp
-                    )
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "Humidity ${d.humidity}% · Wind ${d.wind} km/h",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.sp
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    d.hours.forEach { h ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(h.label, color = Color.White, fontSize = 13.sp)
-                            Text(weatherIcon(h.code, true), fontSize = 22.sp)
-                            Text("${h.temp}°", color = Color.White, fontSize = 15.sp)
-                        }
-                    }
-                }
 
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "5-DAY FORECAST",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 12.sp
-                )
-                days.forEach { day ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            day.label,
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            modifier = Modifier.width(64.dp)
-                        )
-                        Column(
-                            Modifier.width(54.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(weatherIcon(day.code, true), fontSize = 20.sp)
-                            if (day.rain >= 30) {
-                                Text("${day.rain}%", color = Color(0xFF64D2FF), fontSize = 11.sp)
-                            }
-                        }
-                        Text(
-                            "${day.min}°",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 15.sp,
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.width(40.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        RangeBar(day, gMin, gMax)
-                        Spacer(Modifier.width(10.dp))
-                        Text("${day.max}°", color = Color.White, fontSize = 15.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     "Open-Meteo · Updated ${d.updated}",
                     color = Color.White.copy(alpha = 0.4f),
@@ -349,40 +284,83 @@ private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -
 }
 
 @Composable
-fun WeatherPill(modifier: Modifier = Modifier) {
+fun TimeWeatherPill(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val ver = WeatherStore.version
     var data by remember { mutableStateOf<WeatherData?>(null) }
     var showPopup by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
-    val s = focusScale(focused, 1.08f)
+    val s = focusScale(focused, 1.06f)
+
+    val now by produceState(initialValue = Date()) {
+        while (true) {
+            value = Date()
+            delay(1000)
+        }
+    }
+    val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val dateFmt = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
+    val timeText = timeFmt.format(now)
+    val dateText = dateFmt.format(now)
 
     LaunchedEffect(ver) {
         while (true) {
-            val d = fetchWeather(WeatherStore.city(ctx))
-            if (d != null) data = d
+            val w = fetchWeather(WeatherStore.city(ctx))
+            if (w != null) data = w
             delay(30 * 60 * 1000L)
         }
     }
 
     val d = data
-        if (d != null && WeatherStore.enabled(ctx)) {
-        Row(
-            modifier
-                .graphicsLayer { scaleX = s; scaleY = s }
-                .onFocusChanged { focused = it.isFocused }
-                .glass(RoundedCornerShape(50), focused)
-                .clickable { showPopup = true }
-                .padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(weatherIcon(d.code, d.isDay), fontSize = 20.sp)
-            Text("${d.temp}°", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-            Column {
-                Text(weatherText(d.code), color = Color.White, fontSize = 12.sp, maxLines = 1)
-                Text(d.city, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, maxLines = 1)
+    val showWeather = d != null && WeatherStore.enabled(ctx)
+
+    Row(
+        modifier
+            .graphicsLayer { scaleX = s; scaleY = s }
+            .onFocusChanged { focused = it.isFocused }
+            .glass(RoundedCornerShape(50), focused)
+            .clickable { if (showWeather) showPopup = true }
+            .padding(horizontal = 26.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column {
+            Text(
+                timeText,
+                color = Color.White,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(dateText, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+        }
+        if (d != null && showWeather) {
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(36.dp)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(weatherIcon(d.code, d.isDay), fontSize = 20.sp)
+                Text(
+                    "${d.temp}°",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Column {
+                    Text(weatherText(d.code), color = Color.White, fontSize = 12.sp, maxLines = 1)
+                    Text(
+                        d.city,
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }
@@ -390,6 +368,8 @@ fun WeatherPill(modifier: Modifier = Modifier) {
     if (showPopup && d != null) {
         WeatherPopup(
             d = d,
+            timeText = timeText,
+            dateText = dateText,
             onChangeCity = {
                 showPopup = false
                 showPicker = true
@@ -400,4 +380,9 @@ fun WeatherPill(modifier: Modifier = Modifier) {
     if (showPicker) {
         CityPicker(onClose = { showPicker = false })
     }
+}
+
+@Composable
+fun WeatherPill(modifier: Modifier = Modifier) {
+    TimeWeatherPill(modifier)
 }
