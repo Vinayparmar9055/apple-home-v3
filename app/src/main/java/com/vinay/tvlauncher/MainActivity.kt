@@ -146,6 +146,11 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
                             onSettings = { screen = Screen.SETTINGS },
                             onControl = { screen = Screen.CONTROL },
                             onAllApps = { screen = Screen.APPS },
+                            onFavsReorder = { visible ->
+                                val full = visible + effectiveFavs.drop(dockCount)
+                                favs = full
+                                Prefs.setFavourites(ctx, full)
+                            },
                             onLaunch = { launchApp(ctx, it) }
                         )
                     }
