@@ -83,7 +83,7 @@ private fun PRow(
 }
 
 @Composable
-private fun CityPicker(onClose: () -> Unit) {
+ fun CityPicker(onClose: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var stage by remember { mutableStateOf("list") }
@@ -367,7 +367,7 @@ fun WeatherPill(modifier: Modifier = Modifier) {
     }
 
     val d = data
-    if (d != null) {
+        if (d != null && WeatherStore.enabled(ctx)) {
         Row(
             modifier
                 .graphicsLayer { scaleX = s; scaleY = s }
