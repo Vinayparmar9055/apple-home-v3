@@ -48,7 +48,17 @@ val PresetCities = listOf(
 )
 
 object WeatherStore {
-    var version by mutableIntStateOf(0)
+        var version by mutableIntStateOf(0)
+
+    fun enabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
+            .getBoolean("weather_on", true)
+
+    fun setEnabled(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
+            .edit().putBoolean("weather_on", on).apply()
+        version++
+    }
 
     private fun sp(ctx: Context) =
         ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
