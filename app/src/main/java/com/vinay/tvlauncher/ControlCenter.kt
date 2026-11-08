@@ -3,6 +3,8 @@ package com.vinay.tvlauncher
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
+import android.media.tv.TvContract
+import android.media.tv.TvInputManager
 import android.net.wifi.WifiManager
 import android.provider.Settings
 import android.widget.Toast
@@ -62,12 +64,55 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private fun openSafe(ctx: Context, intent: Intent) {
-    try {
-        ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (e: Exception) {
-        Toast.makeText(ctx, "Ye option is TV par nahi khul paya", Toast.LENGTH_SHORT).show()
+private fun openFirst(ctx: Context, intents: List<Intent?>): Boolean {
+    for (i in intents) {
+        if (i == null) continue
+        try {
+            ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        } catch (e: Exception) {
+            // agla vikalp try karo
+        }
     }
+    Toast.makeText(ctx, "Ye option is TV par nahi khul paya", Toast.LENGTH_SHORT).show()
+    return false
+}
+
+private fun tvSettingsClass(cls: String): Intent =
+    Intent().setClassName("com.android.tv.settings", cls)
+
+private fun findAppIntent(ctx: Context, words: List<String>): Intent? {
+    return runCatching {
+        val pm = ctx.packageManager
+        val cats = listOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER)
+        var result: Intent? = null
+        for (c in cats) {
+            if (result != null) break
+            val list = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(c), 0)
+            val hit = list.firstOrNull { ri ->
+                val l = ri.loadLabel(pm).toString().lowercase()
+                words.any { l.contains(it) }
+            }
+            if (hit != null) {
+                result = pm.getLaunchIntentForPackage(hit.activityInfo.packageName)
+            }
+        }
+        result
+    }.getOrNull()
+}
+
+private data class InputEntry(val id: String, val label: String)
+
+private fun loadInputs(ctx: Context): List<InputEntry> {
+    return runCatching {
+        val tm = ctx.getSystemService(Context.TV_INPUT_SERVICE) as TvInputManager
+        tm.tvInputList
+            .filter { it.isPassthroughInput }
+            .map {
+                val name = (it.loadCustomLabel(ctx) ?: it.loadLabel(ctx))?.toString() ?: it.id
+                InputEntry(it.id, name)
+            }
+    }.getOrDefault(emptyList())
 }
 
 @Suppress("DEPRECATION")
@@ -144,6 +189,61 @@ private fun RoundBtn(icon: ImageVector, on: Boolean = false, onClick: () -> Unit
 }
 
 @Composable
+private fun InputsDialog(
+    inputs: List<InputEntry>,
+    onPick: (InputEntry) -> Unit,
+    onClose: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { first.requestFocus() }
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier
+                    .width(380.dp)
+                    .glass(RoundedCornerShape(28.dp), false)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Inputs",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+                )
+                inputs.forEachIndexed { i, entry ->
+                    CcTile(
+                        Modifier.fillMaxWidth().height(56.dp),
+                        RoundedCornerShape(50),
+                        { onPick(entry) },
+                        requester = if (i == 0) first else null
+                    ) { fg ->
+                        Text(
+                            entry.label,
+                            color = fg,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun ControlCenter(
     dark: Boolean,
     onToggleDark: () -> Unit,
@@ -164,6 +264,8 @@ fun ControlCenter(
         runCatching { BluetoothAdapter.getDefaultAdapter()?.isEnabled == true }.getOrDefault(false)
     }
     val first = remember { FocusRequester() }
+    var inputList by remember { mutableStateOf<List<InputEntry>?>(null) }
+
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { first.requestFocus() }
@@ -218,11 +320,29 @@ fun ControlCenter(
                         StatusTile(
                             Modifier.width(224.dp).height(70.dp),
                             Icons.Rounded.Wifi, "Wi-Fi", wifiText
-                        ) { openSafe(ctx, Intent(Settings.ACTION_WIFI_SETTINGS)) }
+                        ) {
+                            openFirst(
+                                ctx,
+                                listOf(
+                                    Intent(Settings.ACTION_WIFI_SETTINGS),
+                                    Intent(Settings.ACTION_SETTINGS)
+                                )
+                            )
+                        }
                         StatusTile(
                             Modifier.width(224.dp).height(70.dp),
                             Icons.Rounded.Bluetooth, "Bluetooth", if (btOn) "On" else "Off"
-                        ) { openSafe(ctx, Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+                        ) {
+                            openFirst(
+                                ctx,
+                                listOf(
+                                    Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
+                                    tvSettingsClass("com.android.tv.settings.accessories.AddAccessoryActivity"),
+                                    tvSettingsClass("com.android.tv.settings.accessories.BluetoothAccessoryActivity"),
+                                    Intent(Settings.ACTION_SETTINGS)
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -230,7 +350,20 @@ fun ControlCenter(
                     StatusTile(
                         Modifier.width(187.dp).height(60.dp),
                         Icons.Rounded.SettingsInputHdmi, "Inputs", null
-                    ) { openSafe(ctx, Intent("android.media.tv.action.SETUP_INPUTS")) }
+                    ) {
+                        val list = loadInputs(ctx)
+                        if (list.isNotEmpty()) {
+                            inputList = list
+                        } else {
+                            openFirst(
+                                ctx,
+                                listOf(
+                                    Intent("android.settings.TV_INPUT_SETTINGS"),
+                                    Intent(Settings.ACTION_SETTINGS)
+                                )
+                            )
+                        }
+                    }
                     StatusTile(
                         Modifier.width(187.dp).height(60.dp),
                         Icons.Rounded.Settings, "Settings", null
@@ -241,14 +374,60 @@ fun ControlCenter(
                     Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    RoundBtn(Icons.Rounded.Mic) { openSafe(ctx, Intent(Intent.ACTION_VOICE_COMMAND)) }
-                    RoundBtn(Icons.Rounded.Cast) { openSafe(ctx, Intent(Settings.ACTION_CAST_SETTINGS)) }
+                    RoundBtn(Icons.Rounded.Mic) {
+                        openFirst(
+                            ctx,
+                            listOf(
+                                Intent(Intent.ACTION_ASSIST),
+                                Intent(Intent.ACTION_VOICE_COMMAND),
+                                ctx.packageManager.getLaunchIntentForPackage("com.google.android.katniss"),
+                                findAppIntent(ctx, listOf("assistant", "voice"))
+                            )
+                        )
+                    }
+                    RoundBtn(Icons.Rounded.Cast) {
+                        openFirst(
+                            ctx,
+                            listOf(
+                                Intent(Settings.ACTION_CAST_SETTINGS),
+                                Intent("android.settings.WIFI_DISPLAY_SETTINGS"),
+                                findAppIntent(ctx, listOf("cast", "mirror", "miracast", "screen share")),
+                                Intent(Settings.ACTION_SETTINGS)
+                            )
+                        )
+                    }
                     RoundBtn(Icons.Rounded.DarkMode, on = dark) { onToggleDark() }
                     RoundBtn(Icons.Rounded.DesktopWindows) {
-                        openSafe(ctx, Intent(Settings.ACTION_DISPLAY_SETTINGS))
+                        openFirst(
+                            ctx,
+                            listOf(
+                                Intent(Settings.ACTION_DISPLAY_SETTINGS),
+                                Intent(Settings.ACTION_SETTINGS)
+                            )
+                        )
                     }
                 }
             }
         }
+    }
+
+    val il = inputList
+    if (il != null) {
+        InputsDialog(
+            inputs = il,
+            onPick = { entry ->
+                inputList = null
+                openFirst(
+                    ctx,
+                    listOf(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            TvContract.buildChannelUriForPassthroughInput(entry.id)
+                        )
+                    )
+                )
+            },
+            onClose = { inputList = null }
+        )
     }
 }
