@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,7 +33,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,15 +45,44 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val TileShape = RoundedCornerShape(16.dp)
-
 private val TileTop = Color(0xFF3C3C42)
 private val TileBottom = Color(0xFF131316)
 private val TileTopFocus = Color(0xFF55555C)
 private val TileBottomFocus = Color(0xFF1F1F23)
 
-private fun Modifier.tileSurface(focused: Boolean): Modifier = this
-    .clip(TileShape)
+private class TileLook(
+    val style: Int,
+    val sizeMul: Float,
+    val corner: Dp,
+    val labels: Boolean
+) {
+    val shape: Shape = RoundedCornerShape(corner)
+}
+
+@Composable
+private fun rememberTileLook(): TileLook {
+    val ctx = LocalContext.current
+    val t = Prefs.tick
+    return remember(t) {
+        TileLook(
+            style = Prefs.iconStyle(ctx),
+            sizeMul = when (Prefs.iconSize(ctx)) {
+                0 -> 0.8f
+                2 -> 1.3f
+                else -> 1f
+            },
+            corner = when (Prefs.tileCorner(ctx)) {
+                0 -> 8.dp
+                2 -> 28.dp
+                else -> 16.dp
+            },
+            labels = Prefs.showLabels(ctx)
+        )
+    }
+}
+
+private fun Modifier.tileSurface(focused: Boolean, shape: Shape): Modifier = this
+    .clip(shape)
     .background(
         Brush.verticalGradient(
             if (focused) listOf(TileTopFocus, TileBottomFocus)
@@ -57,14 +91,14 @@ private fun Modifier.tileSurface(focused: Boolean): Modifier = this
     )
     .then(
         if (focused) {
-            Modifier.border(2.5.dp, Color.White.copy(alpha = 0.9f), TileShape)
+            Modifier.border(2.5.dp, Color.White.copy(alpha = 0.9f), shape)
         } else {
             Modifier.border(
                 1.dp,
                 Brush.verticalGradient(
                     listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.03f))
                 ),
-                TileShape
+                shape
             )
         }
     )
@@ -84,6 +118,33 @@ private fun TileGloss() {
     )
 }
 
+@Composable
+private fun TileIcon(item: AppItem, base: Dp, look: TileLook, tileW: Dp, tileH: Dp) {
+    val mul = if (look.style == 1) look.sizeMul * 1.45f else look.sizeMul
+    val maxS = minOf(tileW, tileH) - 8.dp
+    val sz = (base * mul).coerceAtMost(maxS)
+    val m = Modifier.size(sz)
+    when (look.style) {
+        2 -> Image(
+            item.icon,
+            contentDescription = item.label,
+            modifier = m.clip(RoundedCornerShape(sz * 0.22f))
+        )
+        3 -> Image(
+            item.icon,
+            contentDescription = item.label,
+            modifier = m.clip(CircleShape)
+        )
+        4 -> Image(
+            item.icon,
+            contentDescription = item.label,
+            modifier = m,
+            colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+        )
+        else -> Image(item.icon, contentDescription = item.label, modifier = m)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppRectTile(
@@ -96,10 +157,11 @@ fun AppRectTile(
     selected: Boolean = false,
     onLongClick: (() -> Unit)? = null
 ) {
+    val look = rememberTileLook()
     var focused by remember { mutableStateOf(false) }
     val s = focusScale(focused, 1.12f)
     val labelAlpha = animateFloatAsState(
-        targetValue = if (focused) 1f else 0f,
+        targetValue = if (focused || look.labels) 1f else 0f,
         label = "labelAlpha"
     ).value
     val base = if (requester != null) Modifier.focusRequester(requester) else Modifier
@@ -118,11 +180,11 @@ fun AppRectTile(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused),
+            Modifier.size(width, height).tileSurface(focused, look.shape),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
-            Image(item.icon, contentDescription = item.label, modifier = Modifier.size(iconSize))
+            TileIcon(item, iconSize, look, width, height)
             if (selected) {
                 Box(
                     Modifier
@@ -158,6 +220,7 @@ fun FolderTile(
     width: Dp,
     height: Dp
 ) {
+    val look = rememberTileLook()
     var focused by remember { mutableStateOf(false) }
     val s = focusScale(focused, 1.12f)
     val shown = apps.take(4)
@@ -171,7 +234,7 @@ fun FolderTile(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused),
+            Modifier.size(width, height).tileSurface(focused, look.shape),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
@@ -204,10 +267,11 @@ fun FolderTile(
 
 @Composable
 fun AllAppsTile(onClick: () -> Unit, width: Dp, height: Dp) {
+    val look = rememberTileLook()
     var focused by remember { mutableStateOf(false) }
     val s = focusScale(focused, 1.12f)
     val labelAlpha = animateFloatAsState(
-        targetValue = if (focused) 1f else 0f,
+        targetValue = if (focused || look.labels) 1f else 0f,
         label = "labelAlpha"
     ).value
 
@@ -220,7 +284,7 @@ fun AllAppsTile(onClick: () -> Unit, width: Dp, height: Dp) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused),
+            Modifier.size(width, height).tileSurface(focused, look.shape),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
