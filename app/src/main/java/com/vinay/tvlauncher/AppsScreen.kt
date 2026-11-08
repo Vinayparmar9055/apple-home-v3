@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -31,6 +33,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -41,8 +45,65 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 
 private const val MAX_FAVS = 6
+
+@Composable
+private fun AppsSettingsMenu(
+    onPick: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { first.requestFocus() }
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(top = 28.dp, end = 48.dp),
+            contentAlignment = Alignment.TopEnd
+        ) {
+            Column(
+                Modifier
+                    .width(380.dp)
+                    .glass(RoundedCornerShape(28.dp), false)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Settings",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
+                )
+                Text(
+                    "Pehle option chuno, phir app chuno",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+                )
+                GlassButton(
+                    "Favourite add / hatao",
+                    { onPick("fav") },
+                    Modifier.fillMaxWidth().focusRequester(first)
+                )
+                GlassButton("Tile hilao (Move)", { onPick("move") }, Modifier.fillMaxWidth())
+                GlassButton("Folder (naya ya purana)", { onPick("folder") }, Modifier.fillMaxWidth())
+                GlassButton("App Info", { onPick("info") }, Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
 
 @Composable
 fun AppsScreen(
@@ -50,8 +111,7 @@ fun AppsScreen(
     favPkgs: List<String>,
     onFavsChange: (List<String>) -> Unit,
     onLaunch: (AppItem) -> Unit,
-    onBack: () -> Unit,
-    onSettings: (() -> Unit)? = null
+    onBack: () -> Unit
 ) {
     val ctx = LocalContext.current
     var folders by remember { mutableStateOf(Prefs.folders(ctx)) }
@@ -63,6 +123,8 @@ fun AppsScreen(
     var movingPkg by remember { mutableStateOf<String?>(null) }
     var movingFav by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var pickMode by remember { mutableStateOf<String?>(null) }
     val gridState = rememberLazyGridState()
 
     fun saveFolders(m: Map<String, List<String>>) {
@@ -94,21 +156,6 @@ fun AppsScreen(
             )
         } catch (e: Exception) {
             Toast.makeText(ctx, "App Info nahi khul paya", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun openSettings() {
-        val s = onSettings
-        if (s != null) {
-            s()
-        } else {
-            try {
-                ctx.startActivity(
-                    Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            } catch (e: Exception) {
-                Toast.makeText(ctx, "Settings nahi khul payi", Toast.LENGTH_SHORT).show()
-            }
         }
     }
 
@@ -145,9 +192,38 @@ fun AppsScreen(
         onFavsChange(l)
     }
 
-    BackHandler(enabled = movingPkg != null || movingFav != null) {
+    // Settings se chuna hua kaam app par lagao (fromDock = neeche wali patti se)
+    fun handleTap(app: AppItem, fromDock: Boolean) {
+        val mode = pickMode
+        if (mode == null) {
+            onLaunch(app)
+            return
+        }
+        pickMode = null
+        when (mode) {
+            "fav" -> toggleFav(app)
+            "move" -> {
+                if (fromDock) {
+                    movingFav = app.pkg
+                } else if (app.pkg in inFolder) {
+                    Toast.makeText(
+                        ctx,
+                        "Folder ke andar wale app hil nahi sakte",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    movingPkg = app.pkg
+                }
+            }
+            "folder" -> menuApp = app
+            "info" -> appInfo(app.pkg)
+        }
+    }
+
+    BackHandler(enabled = movingPkg != null || movingFav != null || pickMode != null) {
         movingPkg = null
         movingFav = null
+        pickMode = null
     }
 
     LaunchedEffect(order) {
@@ -160,6 +236,16 @@ fun AppsScreen(
                 if (!visible) runCatching { gridState.animateScrollToItem(target) }
             }
         }
+    }
+
+    val hint: String? = when {
+        movingPkg != null -> "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya"
+        movingFav != null -> "Favourite hilao: ◀ ▶ · OK = ho gaya"
+        pickMode == "fav" -> "Favourite ke liye app chuno · Back = radd"
+        pickMode == "move" -> "Hilane ke liye app chuno · Back = radd"
+        pickMode == "folder" -> "Folder ke liye app chuno · Back = radd"
+        pickMode == "info" -> "App Info ke liye app chuno · Back = radd"
+        else -> null
     }
 
     Column(
@@ -208,23 +294,16 @@ fun AppsScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GlassButton("‹ Back", onBack)
             Spacer(Modifier.weight(1f))
-            if (movingPkg != null) {
+            if (hint != null) {
                 Text(
-                    "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Light
-                )
-            } else if (movingFav != null) {
-                Text(
-                    "Favourite hilao: ◀ ▶ · OK = ho gaya",
+                    hint,
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Light
                 )
             }
             Spacer(Modifier.weight(1f))
-            GlassButton("Settings", { openSettings() })
+            GlassButton("Settings", { showSettings = true })
         }
 
         LazyVerticalGrid(
@@ -256,7 +335,7 @@ fun AppsScreen(
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                     AppRectTile(
                         item = app,
-                        onClick = { onLaunch(app) },
+                        onClick = { handleTap(app, false) },
                         width = 116.dp,
                         height = 76.dp,
                         iconSize = 46.dp,
@@ -277,7 +356,7 @@ fun AppsScreen(
         ) {
             if (favApps.isEmpty()) {
                 Text(
-                    "Koi favourite nahi hai. Upar kisi app par OK dabaye rakho aur Add to Favourites chuno.",
+                    "Koi favourite nahi hai. Settings dabao, Favourite add / hatao chuno, phir app chuno.",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 15.sp,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp)
@@ -290,7 +369,7 @@ fun AppsScreen(
                     itemsIndexed(favApps, key = { _, a -> "fav_" + a.pkg }) { _, app ->
                         AppRectTile(
                             item = app,
-                            onClick = { onLaunch(app) },
+                            onClick = { handleTap(app, true) },
                             width = 112.dp,
                             height = 76.dp,
                             iconSize = 46.dp,
@@ -302,6 +381,16 @@ fun AppsScreen(
         }
     }
 
+    if (showSettings) {
+        AppsSettingsMenu(
+            onPick = { mode ->
+                pickMode = mode
+                showSettings = false
+            },
+            onClose = { showSettings = false }
+        )
+    }
+
     val of = openFolder
     if (of != null && folders.containsKey(of)) {
         val inside = (folders[of] ?: emptyList()).mapNotNull { p ->
@@ -310,7 +399,7 @@ fun AppsScreen(
         FolderPopup(
             name = of,
             apps = inside,
-            onLaunch = { onLaunch(it) },
+            onLaunch = { handleTap(it, false) },
             onLongClick = { menuApp = it },
             onClose = { openFolder = null }
         )
