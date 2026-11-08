@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -131,28 +135,76 @@ private fun TileGloss() {
 
 @Composable
 private fun TileIcon(item: AppItem, base: Dp, look: TileLook, tileW: Dp, tileH: Dp) {
-    val mul = if (look.style == 1) look.sizeMul * 1.45f else look.sizeMul
+    val isSettings = item.pkg == "com.android.tv.settings" ||
+        item.pkg == "com.android.settings"
     val maxS = minOf(tileW, tileH) - 8.dp
-    val sz = (base * mul).coerceAtMost(maxS)
-    val m = Modifier.size(sz)
+    val plainSize = (base * look.sizeMul).coerceAtMost(maxS)
+    val logoSize = (base * look.sizeMul * 1.2f).coerceAtMost(maxS)
+
     when (look.style) {
+        0 -> {
+            // tvOS Icons: sirf logo, bina safed peeche ke
+            if (isSettings) {
+                Icon(
+                    Icons.Rounded.Settings,
+                    contentDescription = item.label,
+                    tint = Color(0xFFD5D8DD),
+                    modifier = Modifier.size(logoSize)
+                )
+            } else {
+                Image(
+                    item.logo ?: item.icon,
+                    contentDescription = item.label,
+                    modifier = Modifier.size(logoSize)
+                )
+            }
+        }
+        1 -> {
+            // Original Banners: app ka TV banner, na ho to logo
+            val bn = item.banner
+            if (bn != null) {
+                Image(
+                    bn,
+                    contentDescription = item.label,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            } else {
+                Image(
+                    item.logo ?: item.icon,
+                    contentDescription = item.label,
+                    modifier = Modifier.size(logoSize)
+                )
+            }
+        }
         2 -> Image(
             item.icon,
             contentDescription = item.label,
-            modifier = m.clip(RoundedCornerShape(sz * 0.22f))
+            modifier = Modifier
+                .size(plainSize)
+                .clip(RoundedCornerShape(plainSize * 0.22f))
         )
         3 -> Image(
             item.icon,
             contentDescription = item.label,
-            modifier = m.clip(CircleShape)
+            modifier = Modifier
+                .size(plainSize)
+                .clip(CircleShape)
         )
         4 -> Image(
             item.icon,
             contentDescription = item.label,
-            modifier = m,
+            modifier = Modifier.size(plainSize),
             colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
         )
-        else -> Image(item.icon, contentDescription = item.label, modifier = m)
+        else -> Image(
+            item.icon,
+            contentDescription = item.label,
+            modifier = Modifier.size(plainSize)
+        )
     }
 }
 
@@ -259,7 +311,11 @@ fun FolderTile(
                         for (c in 0 until 2) {
                             val a = shown.getOrNull(r * 2 + c)
                             if (a != null) {
-                                Image(a.icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                                Image(
+                                    a.logo ?: a.icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             } else {
                                 Spacer(Modifier.size(24.dp))
                             }
