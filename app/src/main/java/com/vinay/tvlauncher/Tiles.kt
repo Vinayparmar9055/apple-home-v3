@@ -45,16 +45,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val TileTop = Color(0xFF3C3C42)
-private val TileBottom = Color(0xFF131316)
-private val TileTopFocus = Color(0xFF55555C)
-private val TileBottomFocus = Color(0xFF1F1F23)
-
 private class TileLook(
     val style: Int,
     val sizeMul: Float,
     val corner: Dp,
-    val labels: Boolean
+    val labels: Boolean,
+    val glass: Int,
+    val blur: Int
 ) {
     val shape: Shape = RoundedCornerShape(corner)
 }
@@ -76,32 +73,46 @@ private fun rememberTileLook(): TileLook {
                 2 -> 28.dp
                 else -> 16.dp
             },
-            labels = Prefs.showLabels(ctx)
+            labels = Prefs.showLabels(ctx),
+            glass = Prefs.glassStyle(ctx),
+            blur = Prefs.blur(ctx)
         )
     }
 }
 
-private fun Modifier.tileSurface(focused: Boolean, shape: Shape): Modifier = this
-    .clip(shape)
-    .background(
-        Brush.verticalGradient(
-            if (focused) listOf(TileTopFocus, TileBottomFocus)
-            else listOf(TileTop, TileBottom)
+private fun Modifier.tileSurface(focused: Boolean, look: TileLook): Modifier {
+    val frosted = look.glass == 1
+    val a = (if (frosted) 0.55f + look.blur * 0.04f else 0.80f + look.blur * 0.02f)
+        .coerceAtMost(1f)
+    val top = if (frosted) {
+        if (focused) Color(0xFFB5BBC6) else Color(0xFF9AA1AD)
+    } else {
+        if (focused) Color(0xFF55555C) else Color(0xFF3C3C42)
+    }
+    val bot = if (frosted) {
+        if (focused) Color(0xFF858B96) else Color(0xFF6B717C)
+    } else {
+        if (focused) Color(0xFF1F1F23) else Color(0xFF131316)
+    }
+    return this
+        .clip(look.shape)
+        .background(
+            Brush.verticalGradient(listOf(top.copy(alpha = a), bot.copy(alpha = a)))
         )
-    )
-    .then(
-        if (focused) {
-            Modifier.border(2.5.dp, Color.White.copy(alpha = 0.9f), shape)
-        } else {
-            Modifier.border(
-                1.dp,
-                Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.03f))
-                ),
-                shape
-            )
-        }
-    )
+        .then(
+            if (focused) {
+                Modifier.border(2.5.dp, Color.White.copy(alpha = 0.9f), look.shape)
+            } else {
+                Modifier.border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.03f))
+                    ),
+                    look.shape
+                )
+            }
+        )
+}
 
 @Composable
 private fun TileGloss() {
@@ -155,7 +166,8 @@ fun AppRectTile(
     iconSize: Dp,
     requester: FocusRequester? = null,
     selected: Boolean = false,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null
 ) {
     val look = rememberTileLook()
     var focused by remember { mutableStateOf(false) }
@@ -175,12 +187,15 @@ fun AppRectTile(
         base
             .width(width)
             .graphicsLayer { scaleX = s; scaleY = s }
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused?.invoke()
+            }
             .then(click),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused, look.shape),
+            Modifier.size(width, height).tileSurface(focused, look),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
@@ -234,7 +249,7 @@ fun FolderTile(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused, look.shape),
+            Modifier.size(width, height).tileSurface(focused, look),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
@@ -284,7 +299,7 @@ fun AllAppsTile(onClick: () -> Unit, width: Dp, height: Dp) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier.size(width, height).tileSurface(focused, look.shape),
+            Modifier.size(width, height).tileSurface(focused, look),
             contentAlignment = Alignment.Center
         ) {
             TileGloss()
