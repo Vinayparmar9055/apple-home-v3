@@ -1,6 +1,7 @@
 package com.vinay.tvlauncher
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,6 +101,51 @@ fun ProfileChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier
 }
 
 @Composable
+fun TopShelf(app: AppItem?) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .glass(RoundedCornerShape(26.dp), false)
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        if (app != null) {
+            Box(
+                Modifier
+                    .size(110.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(app.icon, contentDescription = app.label, modifier = Modifier.size(80.dp))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    app.label,
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Text(
+                    "Favourite app · OK dabao kholne ke liye",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 15.sp
+                )
+            }
+        } else {
+            Text(
+                "Favourites me app jodo (All Apps → Settings → Favourite)",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+@Composable
 fun HomeScreen(
     apps: List<AppItem>,
     favPkgs: List<String>,
@@ -108,11 +155,15 @@ fun HomeScreen(
     onFavsReorder: (List<String>) -> Unit,
     onLaunch: (AppItem) -> Unit
 ) {
+    val ctx = LocalContext.current
+    val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
     val first = remember { FocusRequester() }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
     var movingPkg by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
+    var shelfPkg by remember { mutableStateOf<String?>(null) }
+    val shelfApp = favApps.firstOrNull { it.pkg == shelfPkg } ?: favApps.firstOrNull()
 
     LaunchedEffect(apps.isNotEmpty()) {
         if (apps.isNotEmpty()) {
@@ -177,12 +228,24 @@ fun HomeScreen(
 
         Spacer(Modifier.weight(1f))
 
+        if (showShelf) {
+            TopShelf(shelfApp)
+            Spacer(Modifier.height(14.dp))
+        }
+
         if (movingPkg != null) {
             MoveHint("◀ ▶ se tile hilao · OK dabao jab ho jaye")
             Spacer(Modifier.height(10.dp))
         }
 
-        Dock(favApps, onLaunch, onAllApps, first, onLongClick = { menuApp = it })
+        Dock(
+            favApps,
+            onLaunch,
+            onAllApps,
+            first,
+            onLongClick = { menuApp = it },
+            onFocused = { shelfPkg = it.pkg }
+        )
     }
 
     val ma = menuApp
@@ -208,7 +271,8 @@ fun Dock(
     onLaunch: (AppItem) -> Unit,
     onAllApps: () -> Unit,
     first: FocusRequester,
-    onLongClick: (AppItem) -> Unit
+    onLongClick: (AppItem) -> Unit,
+    onFocused: (AppItem) -> Unit = {}
 ) {
     Box(
         Modifier
@@ -228,7 +292,8 @@ fun Dock(
                     height = 76.dp,
                     iconSize = 46.dp,
                     requester = if (index == 0) first else null,
-                    onLongClick = { onLongClick(app) }
+                    onLongClick = { onLongClick(app) },
+                    onFocused = { onFocused(app) }
                 )
             }
             item { AllAppsTile(onAllApps, 112.dp, 76.dp) }
