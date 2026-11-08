@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +55,10 @@ fun AppsScreen(
     var openFolder by remember { mutableStateOf<String?>(null) }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
     var showNew by remember { mutableStateOf(false) }
+    var order by remember { mutableStateOf(OrderStore.list(ctx)) }
+    var movingPkg by remember { mutableStateOf<String?>(null) }
+    var swallowUp by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
 
     fun saveFolders(m: Map<String, List<String>>) {
         folders = m
@@ -82,18 +94,77 @@ fun AppsScreen(
 
     val inFolder = folders.values.flatten().toSet()
     val folderNames = folders.keys.toList()
-    val looseApps = apps.filter { it.pkg !in inFolder }
+    val orderIdx = order.withIndex().associate { it.value to it.index }
+    val looseApps = apps
+        .filter { it.pkg !in inFolder }
+        .sortedBy { orderIdx[it.pkg] ?: Int.MAX_VALUE }
+
+    fun moveBy(pkg: String, delta: Int) {
+        val list = looseApps.map { it.pkg }
+        val idx = list.indexOf(pkg)
+        if (idx < 0) return
+        val ni = (idx + delta).coerceIn(0, list.lastIndex)
+        if (ni == idx) return
+        val m = list.toMutableList()
+        m.removeAt(idx)
+        m.add(ni, pkg)
+        val newOrder = m + order.filter { it !in m }
+        order = newOrder
+        OrderStore.save(ctx, newOrder)
+    }
+
+    BackHandler(enabled = movingPkg != null) { movingPkg = null }
+
+    LaunchedEffect(order) {
+        val mp = movingPkg
+        if (mp != null) {
+            val idx = looseApps.indexOfFirst { it.pkg == mp }
+            if (idx >= 0) {
+                val target = folderNames.size + idx
+                val visible = gridState.layoutInfo.visibleItemsInfo.any { it.index == target }
+                if (!visible) runCatching { gridState.animateScrollToItem(target) }
+            }
+        }
+    }
 
     Column(
         Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { e ->
+                val mp = movingPkg
+                if (mp == null) {
+                    if (swallowUp && e.type == KeyEventType.KeyUp &&
+                        (e.key == Key.Enter || e.key == Key.DirectionCenter)
+                    ) {
+                        swallowUp = false
+                        true
+                    } else false
+                } else if (e.type == KeyEventType.KeyDown) {
+                    when (e.key) {
+                        Key.DirectionLeft -> { moveBy(mp, -1); true }
+                        Key.DirectionRight -> { moveBy(mp, 1); true }
+                        Key.DirectionUp -> { moveBy(mp, -6); true }
+                        Key.DirectionDown -> { moveBy(mp, 6); true }
+                        Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
+                            movingPkg = null
+                            swallowUp = true
+                            true
+                        }
+                        else -> false
+                    }
+                } else true
+            }
             .padding(horizontal = 48.dp, vertical = 28.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GlassButton("‹ Back", onBack)
             Spacer(Modifier.weight(1f))
             Text(
-                if (editing) "Favourites chuno (${favPkgs.size}/$MAX_FAVS)" else "All Apps",
+                when {
+                    movingPkg != null -> "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya"
+                    editing -> "Favourites chuno (${favPkgs.size}/$MAX_FAVS)"
+                    else -> "All Apps"
+                },
                 color = Color.White,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Light
@@ -107,6 +178,7 @@ fun AppsScreen(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(6),
+            state = gridState,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 20.dp, horizontal = 8.dp),
@@ -169,6 +241,18 @@ fun AppsScreen(
             currentFolder = current,
             onToggleFav = {
                 toggleFav(ma)
+                menuApp = null
+            },
+            onMoveTile = {
+                if (current == null) {
+                    movingPkg = ma.pkg
+                } else {
+                    Toast.makeText(
+                        ctx,
+                        "Folder ke andar wale app hil nahi sakte",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
                 menuApp = null
             },
             onMoveToFolder = { name ->
