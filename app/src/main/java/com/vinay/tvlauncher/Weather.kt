@@ -1,55 +1,10 @@
 package com.vinay.tvlauncher
 
 import android.content.Context
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -254,6 +209,55 @@ fun weatherText(code: Int): String = when (code) {
     95, 96, 99 -> "Thunderstorm"
     else -> "Cloudy"
 }
+package com.vinay.tvlauncher
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 private fun PRow(
@@ -513,8 +517,16 @@ private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(day.label, color = Color.White, fontSize = 16.sp, modifier = Modifier.width(64.dp))
-                        Column(Modifier.width(54.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            day.label,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            modifier = Modifier.width(64.dp)
+                        )
+                        Column(
+                            Modifier.width(54.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(weatherIcon(day.code, true), fontSize = 20.sp)
                             if (day.rain >= 30) {
                                 Text("${day.rain}%", color = Color(0xFF64D2FF), fontSize = 11.sp)
@@ -529,4 +541,74 @@ private fun WeatherPopup(d: WeatherData, onChangeCity: () -> Unit, onClose: () -
                         )
                         Spacer(Modifier.width(10.dp))
                         RangeBar(day, gMin, gMax)
-                        Spacer(Modifier.w
+                        Spacer(Modifier.width(10.dp))
+                        Text("${day.max}°", color = Color.White, fontSize = 15.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Open-Meteo · Updated ${d.updated}",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WeatherPill(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val ver = WeatherStore.version
+    var data by remember { mutableStateOf<WeatherData?>(null) }
+    var showPopup by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    val s = focusScale(focused, 1.08f)
+
+    LaunchedEffect(ver) {
+        while (true) {
+            val d = fetchWeather(WeatherStore.city(ctx))
+            if (d != null) data = d
+            delay(30 * 60 * 1000L)
+        }
+    }
+
+    val d = data
+    if (d != null) {
+        Row(
+            modifier
+                .graphicsLayer { scaleX = s; scaleY = s }
+                .onFocusChanged { focused = it.isFocused }
+                .glass(RoundedCornerShape(50), focused)
+                .clickable { showPopup = true }
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(weatherIcon(d.code, d.isDay), fontSize = 20.sp)
+            Text("${d.temp}°", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+            Column {
+                Text(weatherText(d.code), color = Color.White, fontSize = 12.sp, maxLines = 1)
+                Text(d.city, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, maxLines = 1)
+            }
+        }
+    }
+
+    if (showPopup && d != null) {
+        WeatherPopup(
+            d = d,
+            onChangeCity = {
+                showPopup = false
+                showPicker = true
+            },
+            onClose = { showPopup = false }
+        )
+    }
+    if (showPicker) {
+        CityPicker(onClose = { showPicker = false })
+    }
+}
