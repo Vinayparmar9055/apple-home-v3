@@ -1,6 +1,8 @@
 package com.vinay.tvlauncher
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,22 +13,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -36,12 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 const val USER_NAME = "Vinay"
+const val USER_FULL_NAME = "Vinay Parmar"
 
 fun defaultFavs(apps: List<AppItem>): List<String> {
     val preferred = listOf(
@@ -56,6 +62,43 @@ fun defaultFavs(apps: List<AppItem>): List<String> {
 }
 
 @Composable
+fun ProfileChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    val s = focusScale(focused, 1.08f)
+    Row(
+        modifier
+            .graphicsLayer { scaleX = s; scaleY = s }
+            .onFocusChanged { focused = it.isFocused }
+            .glass(RoundedCornerShape(50), focused)
+            .clickable(onClick = onClick)
+            .padding(start = 10.dp, end = 26.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.25f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.Person,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        Text(
+            name,
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 fun HomeScreen(
     apps: List<AppItem>,
     favPkgs: List<String>,
@@ -65,22 +108,6 @@ fun HomeScreen(
     onFavsReorder: (List<String>) -> Unit,
     onLaunch: (AppItem) -> Unit
 ) {
-    val now by produceState(initialValue = Date()) {
-        while (true) {
-            value = Date()
-            delay(1000)
-        }
-    }
-    val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    val dateFmt = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
-    val hour = Calendar.getInstance().apply { time = now }.get(Calendar.HOUR_OF_DAY)
-    val greeting = when {
-        hour < 12 -> "Good morning"
-        hour < 17 -> "Good afternoon"
-        hour < 21 -> "Good evening"
-        else -> "Good night"
-    }
-
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
     val first = remember { FocusRequester() }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
@@ -135,30 +162,17 @@ fun HomeScreen(
             }
             .padding(start = 48.dp, end = 48.dp, top = 28.dp, bottom = 24.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            Column {
-                Text(
-                    timeFmt.format(now),
-                    color = Color.White,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Light
-                )
-                Text(dateFmt.format(now), color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "$greeting, $USER_NAME",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            TimeWeatherPill(Modifier.focusProperties { down = first })
             Spacer(Modifier.weight(1f))
-            WeatherPill()
-            Spacer(Modifier.width(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GlassButton("Settings", onSettings)
-                GlassButton("Control Center", onControl)
-            }
+            ProfileChip(
+                name = USER_FULL_NAME,
+                onClick = onControl,
+                modifier = Modifier.focusProperties { down = first }
+            )
         }
 
         Spacer(Modifier.weight(1f))
