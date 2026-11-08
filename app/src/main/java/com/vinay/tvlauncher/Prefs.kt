@@ -110,6 +110,14 @@ object Prefs {
         bump()
     }
 
+    // Home par dock ke upar bada Top Shelf card
+    fun topShelf(ctx: Context): Boolean = sp(ctx).getBoolean("top_shelf", true)
+
+    fun setTopShelf(ctx: Context, value: Boolean) {
+        sp(ctx).edit().putBoolean("top_shelf", value).apply()
+        bump()
+    }
+
     // Folders: naam -> app pkg ki list
     fun folders(ctx: Context): Map<String, List<String>> {
         val s = sp(ctx).getString("folders", "") ?: ""
