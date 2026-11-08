@@ -2,8 +2,6 @@ package com.vinay.tvlauncher
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -49,6 +47,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val StandByNames = listOf("Two Widgets", "Analogue", "Float", "Digital")
+private val IconPackNames =
+    listOf("tvOS Icons", "Original Banners", "Rounded", "Circle", "Black & White")
+private val IconSizeNames = listOf("Small", "Medium", "Large")
+private val CornerNames = listOf("Sharp", "Normal", "Round")
 
 @Composable
 private fun SRow(
@@ -174,37 +176,29 @@ fun SettingsPanel(
     var page by remember { mutableStateOf("main") }
     var showRemap by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
+    var showGallery by remember { mutableStateOf(false) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
     var hasWall by remember { mutableStateOf(Wallpaper.exists(ctx)) }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val ok = withContext(Dispatchers.IO) { Wallpaper.save(ctx, uri) }
-                if (ok) {
-                    hasWall = true
-                    onWallpaperChanged()
-                    showEditor = true
-                } else {
-                    Toast.makeText(ctx, "Ye photo load nahi ho payi", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
+    var iconPack by remember { mutableStateOf(Prefs.iconStyle(ctx)) }
+    var iconSize by remember { mutableStateOf(Prefs.iconSize(ctx)) }
+    var gridCols by remember { mutableStateOf(Prefs.gridCols(ctx)) }
+    var dockCount by remember { mutableStateOf(Prefs.dockCount(ctx)) }
+    var corner by remember { mutableStateOf(Prefs.tileCorner(ctx)) }
+    var labels by remember { mutableStateOf(Prefs.showLabels(ctx)) }
 
     BackHandler {
         when (page) {
             "main" -> onClose()
-            "glass", "standby", "wallpaper" -> page = "appearance"
+            "glass", "standby", "wallpaper", "iconpack" -> page = "appearance"
             else -> page = "main"
         }
     }
 
     val first = remember(page) { FocusRequester() }
-    LaunchedEffect(page, showRemap, showEditor) {
-        if (!showRemap && !showEditor) {
+    LaunchedEffect(page, showRemap, showEditor, showGallery) {
+        if (!showRemap && !showEditor && !showGallery) {
             delay(60)
             runCatching { first.requestFocus() }
         }
@@ -230,6 +224,7 @@ fun SettingsPanel(
                 "appearance" -> "Appearance"
                 "glass" -> "Glass Style"
                 "wallpaper" -> "Wallpaper"
+                "iconpack" -> "Icon Pack"
                 else -> "StandBy Style"
             }
             Text(
@@ -262,13 +257,56 @@ fun SettingsPanel(
                         requester = first
                     ) { page = "glass" }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Icon Pack", "tvOS ›") { }
-                    Spacer(Modifier.height(8.dp))
                     SRow("Wallpaper", if (hasWall) "Custom ›" else "Default ›") { page = "wallpaper" }
                     Spacer(Modifier.height(8.dp))
                     SRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
+
+                    SLabel("Icons")
+                    SRow("Icon Pack", IconPackNames[iconPack.coerceIn(0, 4)] + " ›") {
+                        page = "iconpack"
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Icon Size", IconSizeNames[iconSize.coerceIn(0, 2)]) {
+                        iconSize = (iconSize + 1) % 3
+                        Prefs.setIconSize(ctx, iconSize)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Icons Per Row (All Apps)", "$gridCols") {
+                        gridCols = if (gridCols >= 6) 4 else gridCols + 1
+                        Prefs.setGridCols(ctx, gridCols)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Favourites Max", "$dockCount") {
+                        dockCount = if (dockCount >= 6) 4 else dockCount + 1
+                        Prefs.setDockCount(ctx, dockCount)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Tile Corners", CornerNames[corner.coerceIn(0, 2)]) {
+                        corner = (corner + 1) % 3
+                        Prefs.setTileCorner(ctx, corner)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("App Names", if (labels) "Always" else "On Focus") {
+                        labels = !labels
+                        Prefs.setShowLabels(ctx, labels)
+                    }
+
                     SLabel("StandBy")
                     SRow("Style", StandByNames[standby] + " ›") { page = "standby" }
+                }
+
+                "iconpack" -> {
+                    IconPackNames.forEachIndexed { i, name ->
+                        SRow(
+                            name,
+                            checked = iconPack == i,
+                            requester = if (i == 0) first else null
+                        ) {
+                            iconPack = i
+                            Prefs.setIconStyle(ctx, i)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                 }
 
                 "glass" -> {
@@ -291,17 +329,9 @@ fun SettingsPanel(
                 }
 
                 "wallpaper" -> {
-                    SLabel("Gallery se photo chuno")
+                    SLabel("TV me rakhi photo chuno")
                     SRow("Choose from Gallery", requester = first) {
-                        try {
-                            picker.launch("image/*")
-                        } catch (e: Exception) {
-                            Toast.makeText(
-                                ctx,
-                                "TV me gallery/file manager nahi mila",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
+                        showGallery = true
                     }
                     Spacer(Modifier.height(8.dp))
                     SRow("Adjust Photo", "Rotate, Zoom ›") {
@@ -338,6 +368,24 @@ fun SettingsPanel(
 
     if (showRemap) {
         ButtonRemapScreen(apps = apps, onClose = { showRemap = false })
+    }
+    if (showGallery) {
+        GalleryPicker(
+            onPick = { uri ->
+                showGallery = false
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { Wallpaper.save(ctx, uri) }
+                    if (ok) {
+                        hasWall = true
+                        onWallpaperChanged()
+                        showEditor = true
+                    } else {
+                        Toast.makeText(ctx, "Ye photo load nahi ho payi", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onClose = { showGallery = false }
+        )
     }
     if (showEditor) {
         WallpaperEditor(
