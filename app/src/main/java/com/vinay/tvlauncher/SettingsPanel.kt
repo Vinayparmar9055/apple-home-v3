@@ -121,7 +121,7 @@ private fun BlurRow(value: Int, requester: FocusRequester, onChange: (Int) -> Un
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Blur Value",
+                "Blur Value  ◀ ▶",
                 color = if (focused) Color.Black else Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium
@@ -187,6 +187,7 @@ fun SettingsPanel(
     var dockCount by remember { mutableStateOf(Prefs.dockCount(ctx)) }
     var corner by remember { mutableStateOf(Prefs.tileCorner(ctx)) }
     var labels by remember { mutableStateOf(Prefs.showLabels(ctx)) }
+    var topShelf by remember { mutableStateOf(Prefs.topShelf(ctx)) }
 
     BackHandler {
         when (page) {
@@ -260,6 +261,12 @@ fun SettingsPanel(
                     SRow("Wallpaper", if (hasWall) "Custom ›" else "Default ›") { page = "wallpaper" }
                     Spacer(Modifier.height(8.dp))
                     SRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
+
+                    SLabel("Home")
+                    SRow("Top Shelf", if (topShelf) "On" else "Off") {
+                        topShelf = !topShelf
+                        Prefs.setTopShelf(ctx, topShelf)
+                    }
 
                     SLabel("Icons")
                     SRow("Icon Pack", IconPackNames[iconPack.coerceIn(0, 4)] + " ›") {
