@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,16 +50,18 @@ fun AppsScreen(
     favPkgs: List<String>,
     onFavsChange: (List<String>) -> Unit,
     onLaunch: (AppItem) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSettings: (() -> Unit)? = null
 ) {
     val ctx = LocalContext.current
-    var editing by remember { mutableStateOf(false) }
     var folders by remember { mutableStateOf(Prefs.folders(ctx)) }
     var openFolder by remember { mutableStateOf<String?>(null) }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
+    var favMenu by remember { mutableStateOf<AppItem?>(null) }
     var showNew by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf(OrderStore.list(ctx)) }
     var movingPkg by remember { mutableStateOf<String?>(null) }
+    var movingFav by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
 
@@ -92,12 +97,28 @@ fun AppsScreen(
         }
     }
 
+    fun openSettings() {
+        val s = onSettings
+        if (s != null) {
+            s()
+        } else {
+            try {
+                ctx.startActivity(
+                    Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Settings nahi khul payi", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     val inFolder = folders.values.flatten().toSet()
     val folderNames = folders.keys.toList()
     val orderIdx = order.withIndex().associate { it.value to it.index }
     val looseApps = apps
         .filter { it.pkg !in inFolder }
         .sortedBy { orderIdx[it.pkg] ?: Int.MAX_VALUE }
+    val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
 
     fun moveBy(pkg: String, delta: Int) {
         val list = looseApps.map { it.pkg }
@@ -113,7 +134,21 @@ fun AppsScreen(
         OrderStore.save(ctx, newOrder)
     }
 
-    BackHandler(enabled = movingPkg != null) { movingPkg = null }
+    fun moveFav(pkg: String, delta: Int) {
+        val l = favPkgs.toMutableList()
+        val i = l.indexOf(pkg)
+        if (i < 0) return
+        val j = (i + delta).coerceIn(0, l.lastIndex)
+        if (i == j) return
+        l.removeAt(i)
+        l.add(j, pkg)
+        onFavsChange(l)
+    }
+
+    BackHandler(enabled = movingPkg != null || movingFav != null) {
+        movingPkg = null
+        movingFav = null
+    }
 
     LaunchedEffect(order) {
         val mp = movingPkg
@@ -132,7 +167,8 @@ fun AppsScreen(
             .fillMaxSize()
             .onPreviewKeyEvent { e ->
                 val mp = movingPkg
-                if (mp == null) {
+                val mf = movingFav
+                if (mp == null && mf == null) {
                     if (swallowUp && e.type == KeyEventType.KeyUp &&
                         (e.key == Key.Enter || e.key == Key.DirectionCenter)
                     ) {
@@ -141,12 +177,25 @@ fun AppsScreen(
                     } else false
                 } else if (e.type == KeyEventType.KeyDown) {
                     when (e.key) {
-                        Key.DirectionLeft -> { moveBy(mp, -1); true }
-                        Key.DirectionRight -> { moveBy(mp, 1); true }
-                        Key.DirectionUp -> { moveBy(mp, -6); true }
-                        Key.DirectionDown -> { moveBy(mp, 6); true }
+                        Key.DirectionLeft -> {
+                            if (mf != null) moveFav(mf, -1) else if (mp != null) moveBy(mp, -1)
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            if (mf != null) moveFav(mf, 1) else if (mp != null) moveBy(mp, 1)
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            if (mp != null) moveBy(mp, -6)
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            if (mp != null) moveBy(mp, 6)
+                            true
+                        }
                         Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                             movingPkg = null
+                            movingFav = null
                             swallowUp = true
                             true
                         }
@@ -159,21 +208,23 @@ fun AppsScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GlassButton("‹ Back", onBack)
             Spacer(Modifier.weight(1f))
-            Text(
-                when {
-                    movingPkg != null -> "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya"
-                    editing -> "Favourites chuno (${favPkgs.size}/$MAX_FAVS)"
-                    else -> "All Apps"
-                },
-                color = Color.White,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Light
-            )
-            Spacer(Modifier.width(16.dp))
-            GlassButton(
-                if (editing) "Done" else "Favourites chuno",
-                { editing = !editing }
-            )
+            if (movingPkg != null) {
+                Text(
+                    "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Light
+                )
+            } else if (movingFav != null) {
+                Text(
+                    "Favourite hilao: ◀ ▶ · OK = ho gaya",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Light
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            GlassButton("Settings", { openSettings() })
         }
 
         LazyVerticalGrid(
@@ -182,7 +233,9 @@ fun AppsScreen(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 20.dp, horizontal = 8.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         ) {
             items(folderNames, key = { "folder_$it" }) { name ->
                 val inside = (folders[name] ?: emptyList()).mapNotNull { p ->
@@ -203,15 +256,47 @@ fun AppsScreen(
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                     AppRectTile(
                         item = app,
-                        onClick = {
-                            if (editing) toggleFav(app) else onLaunch(app)
-                        },
+                        onClick = { onLaunch(app) },
                         width = 116.dp,
                         height = 76.dp,
                         iconSize = 46.dp,
-                        selected = editing && isFav,
+                        selected = isFav,
                         onLongClick = { menuApp = app }
                     )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .glass(RoundedCornerShape(26.dp), false)
+                .padding(vertical = 10.dp)
+        ) {
+            if (favApps.isEmpty()) {
+                Text(
+                    "Koi favourite nahi hai. Upar kisi app par OK dabaye rakho aur Add to Favourites chuno.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp)
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+                ) {
+                    itemsIndexed(favApps, key = { _, a -> "fav_" + a.pkg }) { _, app ->
+                        AppRectTile(
+                            item = app,
+                            onClick = { onLaunch(app) },
+                            width = 112.dp,
+                            height = 76.dp,
+                            iconSize = 46.dp,
+                            onLongClick = { favMenu = app }
+                        )
+                    }
                 }
             }
         }
@@ -228,6 +313,22 @@ fun AppsScreen(
             onLaunch = { onLaunch(it) },
             onLongClick = { menuApp = it },
             onClose = { openFolder = null }
+        )
+    }
+
+    val fm = favMenu
+    if (fm != null) {
+        DockMenu(
+            app = fm,
+            onMove = {
+                movingFav = fm.pkg
+                favMenu = null
+            },
+            onRemove = {
+                onFavsChange(favPkgs - fm.pkg)
+                favMenu = null
+            },
+            onClose = { favMenu = null }
         )
     }
 
