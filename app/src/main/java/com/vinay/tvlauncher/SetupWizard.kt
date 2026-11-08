@@ -120,16 +120,22 @@ fun SetupWizard(
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var iconStyle by remember { mutableStateOf(Prefs.iconStyle(ctx)) }
     var dock by remember { mutableStateOf(Prefs.dockCount(ctx)) }
-    val total = 6
+    var weatherOn by remember { mutableStateOf(WeatherStore.enabled(ctx)) }
+    var showPicker by remember { mutableStateOf(false) }
+    val wver = WeatherStore.version
+    val cityName = remember(wver) { WeatherStore.city(ctx).name }
+    val total = 7
 
     BackHandler {
         if (step == 0) onFinish() else step -= 1
     }
 
     val first = remember(step) { FocusRequester() }
-    LaunchedEffect(step) {
-        delay(60)
-        runCatching { first.requestFocus() }
+    LaunchedEffect(step, showPicker) {
+        if (!showPicker) {
+            delay(60)
+            runCatching { first.requestFocus() }
+        }
     }
 
     Box(
@@ -220,6 +226,31 @@ fun SetupWizard(
 
                 4 -> {
                     WHeader(
+                        "Weather",
+                        "A live weather pill on the home screen with conditions and temperature."
+                    )
+                    WRow(
+                        "$cityName (Default)", "Show weather for this city",
+                        checked = weatherOn, requester = first
+                    ) {
+                        WeatherStore.setEnabled(ctx, true)
+                        weatherOn = true
+                    }
+                    WRow("Choose Another City…", "Search and select any city") {
+                        showPicker = true
+                    }
+                    WRow(
+                        "Don't Show Weather", "Hide weather pill from the home screen",
+                        checked = !weatherOn
+                    ) {
+                        WeatherStore.setEnabled(ctx, false)
+                        weatherOn = false
+                    }
+                    WRow("Continue") { step = 5 }
+                }
+
+                5 -> {
+                    WHeader(
                         "Default Launcher & Accessibility",
                         "Set tvOS as your primary TV Home screen and turn on Accessibility to catch remote buttons."
                     )
@@ -231,7 +262,7 @@ fun SetupWizard(
                         "Turn On Accessibility",
                         "Required for Home button catching & button remapping"
                     ) { wizOpen(ctx, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                    WRow("Continue") { step = 5 }
+                    WRow("Continue") { step = 6 }
                 }
 
                 else -> {
@@ -270,5 +301,13 @@ fun SetupWizard(
                 )
             }
         }
+    }
+
+    if (showPicker) {
+        CityPicker(onClose = {
+            showPicker = false
+            WeatherStore.setEnabled(ctx, true)
+            weatherOn = true
+        })
     }
 }
