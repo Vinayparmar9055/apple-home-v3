@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -204,15 +210,63 @@ fun FolderPopup(
     apps: List<AppItem>,
     onLaunch: (AppItem) -> Unit,
     onLongClick: (AppItem) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    movingPkg: String? = null,
+    onMoveBy: (Int) -> Unit = {},
+    onMoveDone: () -> Unit = {}
 ) {
     val first = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+    var swallowUp by remember { mutableStateOf(false) }
+    val cols = 4
+
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { first.requestFocus() }
     }
-    DialogFrame(onClose) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+    // Hilate waqt tile screen se bahar ho to scroll karke dikhao
+    val orderKey = apps.joinToString(",") { it.pkg }
+    LaunchedEffect(orderKey) {
+        val mp = movingPkg
+        if (mp != null) {
+            val idx = apps.indexOfFirst { it.pkg == mp }
+            if (idx >= 0) {
+                val visible = gridState.layoutInfo.visibleItemsInfo.any { it.index == idx }
+                if (!visible) runCatching { gridState.animateScrollToItem(idx) }
+            }
+        }
+    }
+
+    DialogFrame({
+        if (movingPkg != null) onMoveDone() else onClose()
+    }) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.onPreviewKeyEvent { e ->
+                if (movingPkg != null) {
+                    if (e.type == KeyEventType.KeyDown) {
+                        when (e.key) {
+                            Key.DirectionLeft -> { onMoveBy(-1); true }
+                            Key.DirectionRight -> { onMoveBy(1); true }
+                            Key.DirectionUp -> { onMoveBy(-cols); true }
+                            Key.DirectionDown -> { onMoveBy(cols); true }
+                            Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
+                                swallowUp = true
+                                onMoveDone()
+                                true
+                            }
+                            else -> false
+                        }
+                    } else true
+                } else if (swallowUp && e.type == KeyEventType.KeyUp &&
+                    (e.key == Key.Enter || e.key == Key.DirectionCenter)
+                ) {
+                    swallowUp = false
+                    true
+                } else false
+            }
+        ) {
             Box(
                 Modifier
                     .clip(RoundedCornerShape(50))
@@ -220,6 +274,14 @@ fun FolderPopup(
                     .padding(horizontal = 22.dp, vertical = 8.dp)
             ) {
                 Text(name, color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            }
+            if (movingPkg != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Tile hilao: ◀ ▶ ▲ ▼ · OK = ho gaya · Back = radd",
+                    color = Color.White,
+                    fontSize = 15.sp
+                )
             }
             Spacer(Modifier.height(12.dp))
             Box(
@@ -229,7 +291,8 @@ fun FolderPopup(
                     .padding(20.dp)
             ) {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(cols),
+                    state = gridState,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.heightIn(max = 320.dp)
