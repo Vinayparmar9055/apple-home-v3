@@ -49,8 +49,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 
-private const val MAX_FAVS = 6
-
 @Composable
 private fun AppsSettingsMenu(
     onPick: (String) -> Unit,
@@ -114,6 +112,23 @@ fun AppsScreen(
     onBack: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val cols = Prefs.gridCols(ctx)
+    val tileW = when (cols) {
+        4 -> 150.dp
+        5 -> 130.dp
+        else -> 116.dp
+    }
+    val tileH = when (cols) {
+        4 -> 92.dp
+        5 -> 82.dp
+        else -> 76.dp
+    }
+    val tileIcon = when (cols) {
+        4 -> 58.dp
+        5 -> 52.dp
+        else -> 46.dp
+    }
+
     var folders by remember { mutableStateOf(Prefs.folders(ctx)) }
     var openFolder by remember { mutableStateOf<String?>(null) }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
@@ -139,12 +154,13 @@ fun AppsScreen(
         m.filter { (k, v) -> v.isNotEmpty() || k == keep }
 
     fun toggleFav(app: AppItem) {
+        val maxFavs = Prefs.dockCount(ctx)
         if (app.pkg in favPkgs) {
             onFavsChange(favPkgs - app.pkg)
-        } else if (favPkgs.size < MAX_FAVS) {
+        } else if (favPkgs.size < maxFavs) {
             onFavsChange(favPkgs + app.pkg)
         } else {
-            Toast.makeText(ctx, "$MAX_FAVS se zyada favourites nahi ho sakte", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "$maxFavs se zyada favourites nahi ho sakte", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -272,11 +288,11 @@ fun AppsScreen(
                             true
                         }
                         Key.DirectionUp -> {
-                            if (mp != null) moveBy(mp, -6)
+                            if (mp != null) moveBy(mp, -cols)
                             true
                         }
                         Key.DirectionDown -> {
-                            if (mp != null) moveBy(mp, 6)
+                            if (mp != null) moveBy(mp, cols)
                             true
                         }
                         Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
@@ -307,7 +323,7 @@ fun AppsScreen(
         }
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(6),
+            columns = GridCells.Fixed(cols),
             state = gridState,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -325,8 +341,8 @@ fun AppsScreen(
                         name = name,
                         apps = inside,
                         onClick = { openFolder = name },
-                        width = 116.dp,
-                        height = 76.dp
+                        width = tileW,
+                        height = tileH
                     )
                 }
             }
@@ -336,9 +352,9 @@ fun AppsScreen(
                     AppRectTile(
                         item = app,
                         onClick = { handleTap(app, false) },
-                        width = 116.dp,
-                        height = 76.dp,
-                        iconSize = 46.dp,
+                        width = tileW,
+                        height = tileH,
+                        iconSize = tileIcon,
                         selected = isFav,
                         onLongClick = { menuApp = app }
                     )
