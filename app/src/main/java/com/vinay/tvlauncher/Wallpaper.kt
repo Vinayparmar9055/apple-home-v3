@@ -9,14 +9,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,11 +67,76 @@ data class WallSettings(
 data class WallBitmaps(val sharp: ImageBitmap, val blur: ImageBitmap)
 
 object Wallpaper {
-    private fun file(ctx: Context) = File(ctx.filesDir, "wallpaper.jpg")
+    const val MAX = 10
+
+    private fun dir(ctx: Context): File {
+        val d = File(ctx.filesDir, "wall_images")
+        if (!d.exists()) d.mkdirs()
+        return d
+    }
+
     private fun sp(ctx: Context) =
         ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
 
-    fun exists(ctx: Context): Boolean = file(ctx).exists()
+    // Purani ek photo wali wallpaper ko nayi list ki pehli photo bana do
+    private fun migrate(ctx: Context) {
+        val old = File(ctx.filesDir, "wallpaper.jpg")
+        if (old.exists()) {
+            runCatching {
+                val target = File(dir(ctx), "img_0.jpg")
+                if (!target.exists()) old.copyTo(target, true)
+                old.delete()
+            }
+        }
+    }
+
+    fun files(ctx: Context): List<File> {
+        migrate(ctx)
+        val l = dir(ctx).listFiles()?.filter { it.name.endsWith(".jpg") } ?: emptyList()
+        return l.sortedBy { it.name }
+    }
+
+    fun count(ctx: Context): Int = files(ctx).size
+
+    fun exists(ctx: Context): Boolean = count(ctx) > 0
+
+    private fun currentIndex(ctx: Context, n: Int): Int =
+        if (n == 0) 0 else sp(ctx).getInt("wall_idx", 0).coerceIn(0, n - 1)
+
+    private fun currentFile(ctx: Context): File? {
+        val l = files(ctx)
+        if (l.isEmpty()) return null
+        return l[currentIndex(ctx, l.size)]
+    }
+
+    fun next(ctx: Context) {
+        val n = count(ctx)
+        if (n < 2) return
+        val i = (currentIndex(ctx, n) + 1) % n
+        sp(ctx).edit().putInt("wall_idx", i).apply()
+    }
+
+    fun removeCurrent(ctx: Context) {
+        val f = currentFile(ctx) ?: return
+        f.delete()
+        val n = count(ctx)
+        sp(ctx).edit().putInt("wall_idx", currentIndex(ctx, n)).apply()
+        if (n == 0) saveSettings(ctx, WallSettings())
+    }
+
+    // Slideshow On/Off
+    fun slideshowOn(ctx: Context): Boolean = sp(ctx).getBoolean("wall_slide", false)
+
+    fun setSlideshow(ctx: Context, value: Boolean) {
+        sp(ctx).edit().putBoolean("wall_slide", value).apply()
+    }
+
+    // Kitne minute me photo badle: 1, 3, 5, 15
+    fun intervalMin(ctx: Context): Int = sp(ctx).getInt("wall_interval", 5)
+
+    fun setIntervalMin(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("wall_interval", value).apply()
+    }
 
     fun settings(ctx: Context): WallSettings {
         val p = sp(ctx)
@@ -96,11 +160,12 @@ object Wallpaper {
     }
 
     fun clear(ctx: Context) {
-        file(ctx).delete()
+        files(ctx).forEach { it.delete() }
+        sp(ctx).edit().putInt("wall_idx", 0).apply()
         saveSettings(ctx, WallSettings())
     }
 
-    fun save(ctx: Context, uri: Uri): Boolean {
+    private fun decode(ctx: Context, uri: Uri): Bitmap? {
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             ctx.contentResolver.openInputStream(uri)?.use {
@@ -111,28 +176,46 @@ object Wallpaper {
             while (maxSide / sample > 2000) sample *= 2
 
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-            val bmp = ctx.contentResolver.openInputStream(uri)?.use {
+            ctx.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, opts)
             }
-            if (bmp == null) {
-                false
-            } else {
-                file(ctx).outputStream().use { out ->
-                    bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
-                }
-                // Khadi (portrait) photo ho to Fit mode, warna Fill
-                saveSettings(ctx, WallSettings(mode = if (bmp.height > bmp.width) 1 else 0))
-                true
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Nayi photo list me jodo (max 10). Jodne ke baad wahi photo dikhegi
+    fun add(ctx: Context, uri: Uri): Boolean {
+        if (count(ctx) >= MAX) return false
+        val bmp = decode(ctx, uri) ?: return false
+        return try {
+            val wasEmpty = count(ctx) == 0
+            val f = File(dir(ctx), "img_" + System.currentTimeMillis() + ".jpg")
+            f.outputStream().use { out ->
+                bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
             }
+            // Pehli photo khadi (portrait) ho to Fit mode, warna Fill
+            if (wasEmpty) {
+                saveSettings(ctx, WallSettings(mode = if (bmp.height > bmp.width) 1 else 0))
+            }
+            val all = files(ctx)
+            val idx = all.indexOfFirst { it.name == f.name }
+            sp(ctx).edit().putInt("wall_idx", if (idx < 0) 0 else idx).apply()
+            true
         } catch (e: Exception) {
             false
         }
     }
 
-    // Saved rotation lagakar photo deta hai
+    // Purani jagah ke liye: sab hata kar sirf ye ek photo rakho
+    fun save(ctx: Context, uri: Uri): Boolean {
+        clear(ctx)
+        return add(ctx, uri)
+    }
+
+    // Abhi dikh rahi photo, saved rotation lagakar
     fun load(ctx: Context): Bitmap? {
-        val f = file(ctx)
-        if (!f.exists()) return null
+        val f = currentFile(ctx) ?: return null
         val src = runCatching { BitmapFactory.decodeFile(f.path) }.getOrNull() ?: return null
         val rot = settings(ctx).rotation
         if (rot == 0) return src
