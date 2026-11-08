@@ -51,6 +51,7 @@ private val IconPackNames =
     listOf("tvOS Icons", "Original Banners", "Rounded", "Circle", "Black & White")
 private val IconSizeNames = listOf("Small", "Medium", "Large")
 private val CornerNames = listOf("Sharp", "Normal", "Round")
+private val IntervalOptions = listOf(1, 3, 5, 15)
 
 @Composable
 private fun SRow(
@@ -180,7 +181,9 @@ fun SettingsPanel(
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
-    var hasWall by remember { mutableStateOf(Wallpaper.exists(ctx)) }
+    var wallCount by remember { mutableStateOf(Wallpaper.count(ctx)) }
+    var slide by remember { mutableStateOf(Wallpaper.slideshowOn(ctx)) }
+    var interval by remember { mutableStateOf(Wallpaper.intervalMin(ctx)) }
     var iconPack by remember { mutableStateOf(Prefs.iconStyle(ctx)) }
     var iconSize by remember { mutableStateOf(Prefs.iconSize(ctx)) }
     var gridCols by remember { mutableStateOf(Prefs.gridCols(ctx)) }
@@ -258,7 +261,14 @@ fun SettingsPanel(
                         requester = first
                     ) { page = "glass" }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Wallpaper", if (hasWall) "Custom ›" else "Default ›") { page = "wallpaper" }
+                    SRow(
+                        "Wallpaper",
+                        when {
+                            wallCount == 0 -> "Default ›"
+                            wallCount == 1 -> "Custom ›"
+                            else -> "$wallCount photos ›"
+                        }
+                    ) { page = "wallpaper" }
                     Spacer(Modifier.height(8.dp))
                     SRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
 
@@ -336,23 +346,70 @@ fun SettingsPanel(
                 }
 
                 "wallpaper" -> {
-                    SLabel("TV me rakhi photo chuno")
-                    SRow("Choose from Gallery", requester = first) {
-                        showGallery = true
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    SRow("Adjust Photo", "Rotate, Zoom ›") {
-                        if (hasWall) {
-                            showEditor = true
+                    SLabel("Photos (max ${Wallpaper.MAX})")
+                    SRow("Add Photo", "$wallCount/${Wallpaper.MAX}", requester = first) {
+                        if (wallCount >= Wallpaper.MAX) {
+                            Toast.makeText(
+                                ctx,
+                                "${Wallpaper.MAX} se zyada photo nahi jod sakte",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         } else {
-                            Toast.makeText(ctx, "Pehle photo chuno", Toast.LENGTH_SHORT).show()
+                            showGallery = true
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Remove Wallpaper", if (hasWall) "" else "Koi nahi") {
-                        Wallpaper.clear(ctx)
-                        hasWall = false
+                    SRow("Adjust Photo", "Rotate, Zoom ›") {
+                        if (wallCount > 0) {
+                            showEditor = true
+                        } else {
+                            Toast.makeText(ctx, "Pehle photo jodo", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    SLabel("Slideshow")
+                    SRow("Slideshow", if (slide) "On" else "Off") {
+                        slide = !slide
+                        Wallpaper.setSlideshow(ctx, slide)
+                        if (slide && wallCount < 2) {
+                            Toast.makeText(
+                                ctx,
+                                "Slideshow ke liye kam se kam 2 photo chahiye",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                         onWallpaperChanged()
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Change Every", "$interval min") {
+                        val i = IntervalOptions.indexOf(interval)
+                        interval = IntervalOptions[(i + 1) % IntervalOptions.size]
+                        Wallpaper.setIntervalMin(ctx, interval)
+                        onWallpaperChanged()
+                    }
+                    if (wallCount > 1) {
+                        Spacer(Modifier.height(8.dp))
+                        SRow("Next Photo") {
+                            Wallpaper.next(ctx)
+                            onWallpaperChanged()
+                        }
+                    }
+
+                    SLabel("Hatao")
+                    SRow("Remove Current Photo", if (wallCount > 0) "" else "Koi nahi") {
+                        if (wallCount > 0) {
+                            Wallpaper.removeCurrent(ctx)
+                            wallCount = Wallpaper.count(ctx)
+                            onWallpaperChanged()
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Remove All Photos", if (wallCount > 0) "" else "Koi nahi") {
+                        if (wallCount > 0) {
+                            Wallpaper.clear(ctx)
+                            wallCount = 0
+                            onWallpaperChanged()
+                        }
                     }
                 }
 
@@ -381,11 +438,11 @@ fun SettingsPanel(
             onPick = { uri ->
                 showGallery = false
                 scope.launch {
-                    val ok = withContext(Dispatchers.IO) { Wallpaper.save(ctx, uri) }
+                    val ok = withContext(Dispatchers.IO) { Wallpaper.add(ctx, uri) }
                     if (ok) {
-                        hasWall = true
+                        wallCount = Wallpaper.count(ctx)
                         onWallpaperChanged()
-                        showEditor = true
+                        if (wallCount == 1) showEditor = true
                     } else {
                         Toast.makeText(ctx, "Ye photo load nahi ho payi", Toast.LENGTH_SHORT).show()
                     }
