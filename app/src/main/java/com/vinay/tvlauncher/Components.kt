@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,36 +42,55 @@ import androidx.compose.ui.unit.sp
 
 val Navy = Color(0xFF0A0F1D)
 
-private val GlassTop = Color(0xFF3A3A40).copy(alpha = 0.80f)
-private val GlassBottom = Color(0xFF131316).copy(alpha = 0.88f)
-private val GlassTopFocus = Color(0xFF5A5A62).copy(alpha = 0.92f)
-private val GlassBottomFocus = Color(0xFF222226).copy(alpha = 0.92f)
+// Glass Style (Liquid / Frosted) aur Blur Value ka asar yahin se sab panels par aata hai
+fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = composed {
+    val ctx = LocalContext.current
+    val t = Prefs.tick
+    val style = remember(t) { Prefs.glassStyle(ctx) }
+    val blur = remember(t) { Prefs.blur(ctx) }
+    val frosted = style == 1
 
-fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = this
-    .clip(shape)
-    .background(
-        Brush.verticalGradient(
-            if (focused) listOf(GlassTopFocus, GlassBottomFocus)
-            else listOf(GlassTop, GlassBottom)
-        )
-    )
-    .background(
-        Brush.verticalGradient(
-            0f to Color.White.copy(alpha = if (focused) 0.16f else 0.10f),
-            0.5f to Color.Transparent,
-            1f to Color.Transparent
-        )
-    )
-    .border(
-        if (focused) 2.dp else 1.dp,
-        Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = if (focused) 0.95f else 0.22f),
-                Color.White.copy(alpha = if (focused) 0.70f else 0.04f)
+    val a = if (frosted) 0.35f + blur * 0.04f else 0.62f + blur * 0.03f
+    val boost = if (focused) 0.10f else 0f
+    val aTop = (a + boost).coerceAtMost(0.97f)
+    val aBot = (a + 0.08f + boost).coerceAtMost(0.97f)
+
+    val top = if (frosted) {
+        if (focused) Color(0xFFB5BBC6) else Color(0xFF9AA1AD)
+    } else {
+        if (focused) Color(0xFF5A5A62) else Color(0xFF3A3A40)
+    }
+    val bot = if (frosted) {
+        if (focused) Color(0xFF858B96) else Color(0xFF6B717C)
+    } else {
+        if (focused) Color(0xFF222226) else Color(0xFF131316)
+    }
+
+    this
+        .clip(shape)
+        .background(
+            Brush.verticalGradient(
+                listOf(top.copy(alpha = aTop), bot.copy(alpha = aBot))
             )
-        ),
-        shape
-    )
+        )
+        .background(
+            Brush.verticalGradient(
+                0f to Color.White.copy(alpha = if (focused) 0.16f else 0.10f),
+                0.5f to Color.Transparent,
+                1f to Color.Transparent
+            )
+        )
+        .border(
+            if (focused) 2.dp else 1.dp,
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = if (focused) 0.95f else 0.22f),
+                    Color.White.copy(alpha = if (focused) 0.70f else 0.04f)
+                )
+            ),
+            shape
+        )
+}
 
 @Composable
 fun focusScale(focused: Boolean, target: Float): Float =
