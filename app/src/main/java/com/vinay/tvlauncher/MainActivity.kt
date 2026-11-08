@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY, ANDROID, RECENTS }
@@ -64,6 +65,19 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
         value = withContext(Dispatchers.IO) { Wallpaper.loadBitmaps(ctx) }
     }
     val wallSettings = remember(wallTick) { Wallpaper.settings(ctx) }
+
+    // Wallpaper Slideshow: har kuch minute baad agli photo
+    LaunchedEffect(wallTick, setupDone) {
+        val waitMs = withContext(Dispatchers.IO) {
+            val on = Wallpaper.slideshowOn(ctx) && Wallpaper.count(ctx) > 1
+            if (on) Wallpaper.intervalMin(ctx) * 60_000L else -1L
+        }
+        if (waitMs > 0) {
+            delay(waitMs)
+            withContext(Dispatchers.IO) { Wallpaper.next(ctx) }
+            wallTick++
+        }
+    }
 
     LaunchedEffect(resumeTick) {
         apps = withContext(Dispatchers.IO) { loadApps(ctx) }
