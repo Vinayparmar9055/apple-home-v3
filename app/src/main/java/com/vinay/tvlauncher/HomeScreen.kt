@@ -29,11 +29,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,6 +45,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -159,16 +162,33 @@ fun HomeScreen(
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
     val first = remember { FocusRequester() }
+    val timeReq = remember { FocusRequester() }
+    val profileReq = remember { FocusRequester() }
+    var lastTop by remember { mutableStateOf<FocusRequester?>(null) }
     var menuApp by remember { mutableStateOf<AppItem?>(null) }
     var movingPkg by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
     var shelfPkg by remember { mutableStateOf<String?>(null) }
     val shelfApp = favApps.firstOrNull { it.pkg == shelfPkg } ?: favApps.firstOrNull()
+    val windowInfo = LocalWindowInfo.current
 
     LaunchedEffect(apps.isNotEmpty()) {
         if (apps.isNotEmpty()) {
             delay(200)
             runCatching { first.requestFocus() }
+        }
+    }
+
+    // Popup (Control Center / Weather) band hone par focus wapas usi patti par
+    LaunchedEffect(Unit) {
+        snapshotFlow { windowInfo.isWindowFocused }.collect { nowFocused ->
+            if (nowFocused) {
+                val r = lastTop
+                if (r != null) {
+                    delay(200)
+                    runCatching { r.requestFocus() }
+                }
+            }
         }
     }
 
@@ -217,12 +237,20 @@ fun HomeScreen(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            TimeWeatherPill(Modifier.focusProperties { down = first })
+            TimeWeatherPill(
+                Modifier
+                    .focusProperties { down = first }
+                    .focusRequester(timeReq)
+                    .onFocusChanged { if (it.isFocused) lastTop = timeReq }
+            )
             Spacer(Modifier.weight(1f))
             ProfileChip(
                 name = USER_FULL_NAME,
                 onClick = onControl,
-                modifier = Modifier.focusProperties { down = first }
+                modifier = Modifier
+                    .focusProperties { down = first }
+                    .focusRequester(profileReq)
+                    .onFocusChanged { if (it.isFocused) lastTop = profileReq }
             )
         }
 
@@ -244,7 +272,10 @@ fun HomeScreen(
             onAllApps,
             first,
             onLongClick = { menuApp = it },
-            onFocused = { shelfPkg = it.pkg }
+            onFocused = {
+                shelfPkg = it.pkg
+                lastTop = null
+            }
         )
     }
 
