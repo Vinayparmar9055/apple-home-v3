@@ -178,6 +178,8 @@ fun SettingsPanel(
     var showRemap by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
     var showGallery by remember { mutableStateOf(false) }
+    var showProfileGallery by remember { mutableStateOf(false) }
+    var hasProfile by remember { mutableStateOf(ProfilePhoto.exists(ctx)) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
@@ -201,8 +203,8 @@ fun SettingsPanel(
     }
 
     val first = remember(page) { FocusRequester() }
-    LaunchedEffect(page, showRemap, showEditor, showGallery) {
-        if (!showRemap && !showEditor && !showGallery) {
+    LaunchedEffect(page, showRemap, showEditor, showGallery, showProfileGallery) {
+        if (!showRemap && !showEditor && !showGallery && !showProfileGallery) {
             delay(60)
             runCatching { first.requestFocus() }
         }
@@ -276,6 +278,17 @@ fun SettingsPanel(
                     SRow("Top Shelf", if (topShelf) "On" else "Off") {
                         topShelf = !topShelf
                         Prefs.setTopShelf(ctx, topShelf)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SRow("Profile Photo", if (hasProfile) "Set ›" else "Not set ›") {
+                        showProfileGallery = true
+                    }
+                    if (hasProfile) {
+                        Spacer(Modifier.height(8.dp))
+                        SRow("Remove Profile Photo") {
+                            ProfilePhoto.clear(ctx)
+                            hasProfile = false
+                        }
                     }
 
                     SLabel("Icons")
@@ -449,6 +462,23 @@ fun SettingsPanel(
                 }
             },
             onClose = { showGallery = false }
+        )
+    }
+    if (showProfileGallery) {
+        GalleryPicker(
+            onPick = { uri ->
+                showProfileGallery = false
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { ProfilePhoto.save(ctx, uri) }
+                    if (ok) {
+                        hasProfile = true
+                        ProfilePhoto.bump()
+                    } else {
+                        Toast.makeText(ctx, "Ye photo load nahi ho payi", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onClose = { showProfileGallery = false }
         )
     }
     if (showEditor) {
