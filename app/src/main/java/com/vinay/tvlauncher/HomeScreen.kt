@@ -3,6 +3,7 @@ package com.vinay.tvlauncher
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -38,18 +40,22 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 const val USER_NAME = "Vinay"
 const val USER_FULL_NAME = "Vinay Parmar"
@@ -68,6 +74,11 @@ fun defaultFavs(apps: List<AppItem>): List<String> {
 
 @Composable
 fun ProfileChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val rev = ProfilePhoto.rev
+    val photo by produceState<ImageBitmap?>(initialValue = null, rev) {
+        value = withContext(Dispatchers.IO) { ProfilePhoto.load(ctx) }
+    }
     var focused by remember { mutableStateOf(false) }
     val s = focusScale(focused, 1.08f)
     Row(
@@ -82,17 +93,27 @@ fun ProfileChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier
     ) {
         Box(
             Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.25f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Rounded.Person,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(26.dp)
-            )
+            val p = photo
+            if (p != null) {
+                Image(
+                    bitmap = p,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Rounded.Person,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
         Text(
             name,
@@ -305,29 +326,37 @@ fun Dock(
     onLongClick: (AppItem) -> Unit,
     onFocused: (AppItem) -> Unit = {}
 ) {
+    // Bahar ek patli safed line, andar glass dock (photo jaisa)
     Box(
         Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(26.dp), false)
-            .padding(vertical = 14.dp)
+            .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(32.dp))
+            .padding(5.dp)
     ) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .glass(RoundedCornerShape(26.dp), false)
+                .padding(vertical = 14.dp)
         ) {
-            itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
-                AppRectTile(
-                    item = app,
-                    onClick = { onLaunch(app) },
-                    width = 112.dp,
-                    height = 76.dp,
-                    iconSize = 46.dp,
-                    requester = if (index == 0) first else null,
-                    onLongClick = { onLongClick(app) },
-                    onFocused = { onFocused(app) }
-                )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+            ) {
+                itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
+                    AppRectTile(
+                        item = app,
+                        onClick = { onLaunch(app) },
+                        width = 112.dp,
+                        height = 76.dp,
+                        iconSize = 46.dp,
+                        requester = if (index == 0) first else null,
+                        onLongClick = { onLongClick(app) },
+                        onFocused = { onFocused(app) }
+                    )
+                }
+                item { AllAppsTile(onAllApps, 112.dp, 76.dp) }
             }
-            item { AllAppsTile(onAllApps, 112.dp, 76.dp) }
         }
     }
 }
