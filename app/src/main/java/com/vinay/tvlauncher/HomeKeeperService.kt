@@ -29,6 +29,17 @@ class HomeKeeperService : AccessibilityService() {
         "com.google.android.leanbacklauncher"
     )
 
+    // Ye packages kabhi "Home app" nahi maane jayenge (Settings me FallbackHome hota hai,
+    // jo HOME category declare karta hai - isi wajah se Settings khulte hi band ho jati thi)
+    private val neverHome = setOf(
+        "android",
+        "com.android.settings",
+        "com.android.tv.settings",
+        "com.android.systemui",
+        "com.google.android.tvsettings",
+        "com.google.android.settings.intelligence"
+    )
+
     // Ye packages recent list me nahi judte
     private val ignoredForRecents = setOf(
         "android",
@@ -74,7 +85,7 @@ class HomeKeeperService : AccessibilityService() {
             val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
             packageManager.queryIntentActivities(i, 0)
                 .map { it.activityInfo.packageName }
-                .filter { it != packageName }
+                .filter { it != packageName && it !in neverHome && !it.contains("settings", true) }
                 .toSet()
         }.getOrDefault(emptySet())
         homeCache = found + stockLaunchers
