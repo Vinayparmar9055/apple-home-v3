@@ -258,7 +258,7 @@ fun HomeScreen(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            TimeWeatherPill(
+            LeftInfoBlock(
                 Modifier
                     .focusProperties { down = first }
                     .focusRequester(timeReq)
