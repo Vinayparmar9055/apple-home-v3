@@ -523,3 +523,30 @@ private fun LeftPopup(
                             { ClockPrefs.set(ctx, 2) },
                             Modifier
                         )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    TithiCalendar(
+                        year = year,
+                        month = month,
+                        onPrev = {
+                            if (month == 0) {
+                                month = 11
+                                year -= 1
+                            } else {
+                                month -= 1
+                            }
+                        },
+                        onNext = {
+                            if (month == 11) {
+                                month = 0
+                                year += 1
+                            } else {
+                                month += 1
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
