@@ -83,6 +83,10 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
         apps = withContext(Dispatchers.IO) { loadApps(ctx) }
     }
     LaunchedEffect(homeTick) { screen = Screen.HOME }
+        val standByAtStart = remember { StandByLink.tick }
+    LaunchedEffect(StandByLink.tick) {
+        if (StandByLink.tick != standByAtStart) screen = Screen.STANDBY
+    }
     LaunchedEffect(recentsTick) {
         if (recentsTick > 0) screen = Screen.RECENTS
     }
