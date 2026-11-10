@@ -524,6 +524,8 @@ private fun LeftPopup(
                             Modifier
                         )
                     }
+                          Spacer(Modifier.height(8.dp))
+                    GlassButton("StandBy", { onClose(); StandByLink.open() }, Modifier)
                     Spacer(Modifier.height(10.dp))
                     TithiCalendar(
                         year = year,
