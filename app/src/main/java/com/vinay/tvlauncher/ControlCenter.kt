@@ -1,13 +1,18 @@
 package com.vinay.tvlauncher
 
-import android.bluetooth.BluetoothAdapter
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.tv.TvContract
 import android.media.tv.TvInputManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,20 +29,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccessTime
-import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsInputHdmi
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -59,10 +63,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val WifiBlue = Color(0xFF0A84FF)
 
 private fun openFirst(ctx: Context, intents: List<Intent?>): Boolean {
     for (i in intents) {
@@ -115,18 +122,28 @@ private fun loadInputs(ctx: Context): List<InputEntry> {
     }.getOrDefault(emptyList())
 }
 
+private data class WifiState(val enabled: Boolean, val connected: Boolean, val name: String?)
+
 @Suppress("DEPRECATION")
-private fun wifiLabel(ctx: Context): String {
+private fun wifiState(ctx: Context): WifiState {
     return runCatching {
         val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         if (!wm.isWifiEnabled) {
-            "Off"
-        } else {
+            return@runCatching WifiState(false, false, null)
+        }
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        val connected = caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        var name: String? = null
+        if (connected) {
             val raw = wm.connectionInfo?.ssid ?: ""
             val ssid = raw.removePrefix("\"").removeSuffix("\"")
-            if (ssid.isBlank() || ssid.contains("unknown ssid", ignoreCase = true)) "On" else ssid
+            if (ssid.isNotBlank() && !ssid.contains("unknown ssid", ignoreCase = true)) {
+                name = ssid
+            }
         }
-    }.getOrDefault("Off")
+        WifiState(true, connected, name)
+    }.getOrDefault(WifiState(false, false, null))
 }
 
 @Composable
@@ -162,6 +179,7 @@ private fun StatusTile(
     icon: ImageVector,
     title: String,
     sub: String?,
+    iconTint: Color? = null,
     onClick: () -> Unit
 ) {
     CcTile(modifier, RoundedCornerShape(50), onClick) { fg ->
@@ -170,7 +188,12 @@ private fun StatusTile(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(horizontal = 14.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(26.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = iconTint ?: fg,
+                modifier = Modifier.size(26.dp)
+            )
             Column {
                 Text(title, color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 if (sub != null) {
@@ -243,6 +266,7 @@ private fun InputsDialog(
     }
 }
 
+// StandBy ab left wale popup me hai, isliye yahan onStandBy use nahi hota
 @Composable
 fun ControlCenter(
     dark: Boolean,
@@ -259,16 +283,38 @@ fun ControlCenter(
         }
     }
     val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    val wifiText = remember { wifiLabel(ctx) }
-    val btOn = remember {
-        runCatching { BluetoothAdapter.getDefaultAdapter()?.isEnabled == true }.getOrDefault(false)
-    }
     val first = remember { FocusRequester() }
     var inputList by remember { mutableStateOf<List<InputEntry>?>(null) }
+
+    // Wi-Fi: connect ho to neela icon + network ka naam
+    var wifiTick by remember { mutableIntStateOf(0) }
+    var asked by remember { mutableStateOf(false) }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> wifiTick++ }
+    val wifi = remember(wifiTick) { wifiState(ctx) }
+    val wifiSub = when {
+        !wifi.enabled -> "Off"
+        !wifi.connected -> "On"
+        wifi.name != null -> wifi.name
+        else -> "Connected"
+    }
 
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { first.requestFocus() }
+    }
+
+    // Naam dikhane ke liye Android location permission maangta hai (sirf ek baar poochta hai)
+    LaunchedEffect(Unit) {
+        delay(400)
+        val granted = ContextCompat.checkSelfPermission(
+            ctx, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (wifi.connected && wifi.name == null && !granted && !asked) {
+            asked = true
+            runCatching { permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
+        }
     }
 
     Dialog(
@@ -298,76 +344,51 @@ fun ControlCenter(
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
                 )
 
+                // Wi-Fi: poori chaudai, taaki network ka naam dikhe
+                StatusTile(
+                    Modifier.fillMaxWidth().height(66.dp).focusRequester(first),
+                    Icons.Rounded.Wifi, "Wi-Fi", wifiSub,
+                    iconTint = if (wifi.connected) WifiBlue else null
+                ) {
+                    openFirst(
+                        ctx,
+                        listOf(
+                            Intent(Settings.ACTION_WIFI_SETTINGS),
+                            Intent(Settings.ACTION_SETTINGS)
+                        )
+                    )
+                }
+
+                // Settings ke do hisse: Launcher ki settings aur seedha TV ki settings
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CcTile(
-                        Modifier.size(150.dp),
-                        RoundedCornerShape(26.dp),
-                        onStandBy,
-                        requester = first
-                    ) { fg ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Rounded.AccessTime,
-                                contentDescription = null,
-                                tint = fg,
-                                modifier = Modifier.size(44.dp)
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text("StandBy", color = fg, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatusTile(
-                            Modifier.width(224.dp).height(70.dp),
-                            Icons.Rounded.Wifi, "Wi-Fi", wifiText
-                        ) {
-                            openFirst(
-                                ctx,
-                                listOf(
-                                    Intent(Settings.ACTION_WIFI_SETTINGS),
-                                    Intent(Settings.ACTION_SETTINGS)
-                                )
-                            )
-                        }
-                        StatusTile(
-                            Modifier.width(224.dp).height(70.dp),
-                            Icons.Rounded.Bluetooth, "Bluetooth", if (btOn) "On" else "Off"
-                        ) {
-                            openFirst(
-                                ctx,
-                                listOf(
-                                    Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
-                                    tvSettingsClass("com.android.tv.settings.accessories.AddAccessoryActivity"),
-                                    tvSettingsClass("com.android.tv.settings.accessories.BluetoothAccessoryActivity"),
-                                    Intent(Settings.ACTION_SETTINGS)
-                                )
-                            )
-                        }
+                    StatusTile(
+                        Modifier.width(187.dp).height(60.dp),
+                        Icons.Rounded.Tune, "Launcher", "Settings"
+                    ) { onSettings() }
+                    StatusTile(
+                        Modifier.width(187.dp).height(60.dp),
+                        Icons.Rounded.Settings, "TV Settings", null
+                    ) {
+                        openFirst(ctx, listOf(Intent(Settings.ACTION_SETTINGS)))
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatusTile(
-                        Modifier.width(187.dp).height(60.dp),
-                        Icons.Rounded.SettingsInputHdmi, "Inputs", null
-                    ) {
-                        val list = loadInputs(ctx)
-                        if (list.isNotEmpty()) {
-                            inputList = list
-                        } else {
-                            openFirst(
-                                ctx,
-                                listOf(
-                                    Intent("android.settings.TV_INPUT_SETTINGS"),
-                                    Intent(Settings.ACTION_SETTINGS)
-                                )
+                StatusTile(
+                    Modifier.fillMaxWidth().height(56.dp),
+                    Icons.Rounded.SettingsInputHdmi, "Inputs", null
+                ) {
+                    val list = loadInputs(ctx)
+                    if (list.isNotEmpty()) {
+                        inputList = list
+                    } else {
+                        openFirst(
+                            ctx,
+                            listOf(
+                                Intent("android.settings.TV_INPUT_SETTINGS"),
+                                Intent(Settings.ACTION_SETTINGS)
                             )
-                        }
+                        )
                     }
-                    StatusTile(
-                        Modifier.width(187.dp).height(60.dp),
-                        Icons.Rounded.Settings, "Settings", null
-                    ) { onSettings() }
                 }
 
                 Row(
@@ -397,10 +418,12 @@ fun ControlCenter(
                         )
                     }
                     RoundBtn(Icons.Rounded.DarkMode, on = dark) { onToggleDark() }
+                    // Aakhri gol icon: seedha "Display & Sound" page
                     RoundBtn(Icons.Rounded.DesktopWindows) {
                         openFirst(
                             ctx,
                             listOf(
+                                tvSettingsClass("com.android.tv.settings.device.displaysound.DisplaySoundActivity"),
                                 Intent(Settings.ACTION_DISPLAY_SETTINGS),
                                 Intent(Settings.ACTION_SETTINGS)
                             )
