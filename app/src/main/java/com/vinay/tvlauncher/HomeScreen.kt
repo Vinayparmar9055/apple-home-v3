@@ -258,7 +258,7 @@ fun HomeScreen(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            LeftInfoBlock(
+            LeftInfoCompact(
                 Modifier
                     .focusProperties { down = first }
                     .focusRequester(timeReq)
