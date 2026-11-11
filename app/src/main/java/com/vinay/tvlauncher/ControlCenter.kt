@@ -8,6 +8,7 @@ import android.media.tv.TvContract
 import android.media.tv.TvInputManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.SupplicantState
 import android.net.wifi.WifiManager
 import android.provider.Settings
 import android.widget.Toast
@@ -15,7 +16,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -126,26 +128,40 @@ private data class WifiState(val enabled: Boolean, val connected: Boolean, val n
 
 @Suppress("DEPRECATION")
 private fun wifiState(ctx: Context): WifiState {
-    return runCatching {
-        val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        if (!wm.isWifiEnabled) {
-            return@runCatching WifiState(false, false, null)
-        }
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-        val connected = caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-        var name: String? = null
-        if (connected) {
-            val raw = wm.connectionInfo?.ssid ?: ""
+    val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        ?: return WifiState(false, false, null)
+    val enabled = runCatching { wm.isWifiEnabled }.getOrDefault(false)
+    var connected = false
+    var name: String? = null
+    runCatching {
+        val info = wm.connectionInfo
+        if (info != null) {
+            if (info.supplicantState == SupplicantState.COMPLETED) connected = true
+            val raw = info.ssid ?: ""
             val ssid = raw.removePrefix("\"").removeSuffix("\"")
-            if (ssid.isNotBlank() && !ssid.contains("unknown ssid", ignoreCase = true)) {
+            if (ssid.isNotBlank() &&
+                !ssid.contains("unknown ssid", ignoreCase = true) &&
+                ssid != "0x"
+            ) {
                 name = ssid
+                connected = true
             }
         }
-        WifiState(true, connected, name)
-    }.getOrDefault(WifiState(false, false, null))
+    }
+    runCatching {
+        if ((wm.dhcpInfo?.ipAddress ?: 0) != 0) connected = true
+    }
+    runCatching {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            connected = true
+        }
+    }
+    return WifiState(enabled || connected, connected, name)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CcTile(
     modifier: Modifier,
@@ -153,6 +169,7 @@ private fun CcTile(
     onClick: () -> Unit,
     requester: FocusRequester? = null,
     on: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable (Color) -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -168,7 +185,7 @@ private fun CcTile(
             .clip(shape)
             .background(if (hi) Color.White else Color.White.copy(alpha = 0.10f))
             .border(1.dp, Color.White.copy(alpha = if (hi) 0f else 0.28f), shape)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center
     ) { content(fg) }
 }
@@ -205,8 +222,13 @@ private fun StatusTile(
 }
 
 @Composable
-private fun RoundBtn(icon: ImageVector, on: Boolean = false, onClick: () -> Unit) {
-    CcTile(Modifier.size(60.dp), CircleShape, onClick, on = on) { fg ->
+private fun RoundBtn(
+    icon: ImageVector,
+    on: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    CcTile(Modifier.size(60.dp), CircleShape, onClick, on = on, onLongClick = onLongClick) { fg ->
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(26.dp))
     }
 }
@@ -285,6 +307,7 @@ fun ControlCenter(
     val timeFmt = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
     val first = remember { FocusRequester() }
     var inputList by remember { mutableStateOf<List<InputEntry>?>(null) }
+    var showPagePicker by remember { mutableStateOf(false) }
 
     // Wi-Fi: connect ho to neela icon + network ka naam
     var wifiTick by remember { mutableIntStateOf(0) }
@@ -419,15 +442,15 @@ fun ControlCenter(
                     }
                     RoundBtn(Icons.Rounded.DarkMode, on = dark) { onToggleDark() }
                     // Aakhri gol icon: seedha "Display & Sound" page
-                    RoundBtn(Icons.Rounded.DesktopWindows) {
-                        openFirst(
-                            ctx,
-                            listOf(
-                                tvSettingsClass("com.android.tv.settings.device.displaysound.DisplaySoundActivity"),
-                                Intent(Settings.ACTION_DISPLAY_SETTINGS),
-                                Intent(Settings.ACTION_SETTINGS)
-                            )
-                        )
+                    // (dabake rakho = sahi page dobara chuno)
+                    RoundBtn(
+                        Icons.Rounded.DesktopWindows,
+                        onLongClick = { showPagePicker = true }
+                    ) {
+                        val saved = DisplaySoundTarget.load(ctx)
+                        if (saved == null || !DisplaySoundTarget.open(ctx, saved)) {
+                            showPagePicker = true
+                        }
                     }
                 }
             }
@@ -452,5 +475,8 @@ fun ControlCenter(
             },
             onClose = { inputList = null }
         )
+    }
+    if (showPagePicker) {
+        SettingsPagePicker(onClose = { showPagePicker = false })
     }
 }
