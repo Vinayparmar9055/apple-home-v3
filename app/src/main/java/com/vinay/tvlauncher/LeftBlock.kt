@@ -409,7 +409,7 @@ private fun TithiCalendar(year: Int, month: Int, onPrev: () -> Unit, onNext: () 
 }
 
 @Composable
-private fun LeftPopup(
+    fun LeftPopup(
     d: WeatherData?,
     aqi: Int?,
     onChangeCity: () -> Unit,
