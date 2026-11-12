@@ -310,6 +310,7 @@ fun HomeScreen(
             rowApps = rowApps,
             listState = listState,
             first = first,
+            inRows = inRows,
             onLaunch = onLaunch,
             onLongClick = { menuApp = it },
             onRowLongClick = { onFavsReorder(favPkgs + it.pkg) },
@@ -348,6 +349,7 @@ fun Dock(
     rowApps: List<AppItem>,
     listState: LazyListState,
     first: FocusRequester,
+    inRows: Boolean,
     onLaunch: (AppItem) -> Unit,
     onLongClick: (AppItem) -> Unit,
     onRowLongClick: (AppItem) -> Unit,
@@ -355,26 +357,31 @@ fun Dock(
     onRowFocused: () -> Unit
 ) {
     val rows = remember(rowApps) { rowApps.chunked(6) }
-    // Bahar ek patli safed line, andar glass dock (photo jaisa)
-    Box(
-        Modifier
+    val listHeight = when {
+        rows.isEmpty() -> 140.dp
+        inRows -> 340.dp
+        else -> 240.dp
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(32.dp))
-            .padding(5.dp)
+            .height(listHeight)
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .glass(RoundedCornerShape(26.dp), false)
-                .padding(vertical = 8.dp)
-        ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
+        // Pehli line: sirf yahi glass + safed line me
+        item(key = "favs") {
+            Box(
+                Modifier
                     .fillMaxWidth()
-                    .then(if (rows.isEmpty()) Modifier else Modifier.height(190.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(32.dp))
+                    .padding(5.dp)
             ) {
-                item(key = "favs") {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .glass(RoundedCornerShape(26.dp), false)
+                        .padding(vertical = 8.dp)
+                ) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
@@ -393,26 +400,27 @@ fun Dock(
                         }
                     }
                 }
-                itemsIndexed(rows, key = { i, _ -> "row$i" }) { _, row ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 22.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        row.forEach { app ->
-                            AppRectTile(
-                                item = app,
-                                onClick = { onLaunch(app) },
-                                width = 112.dp,
-                                height = 76.dp,
-                                iconSize = 46.dp,
-                                requester = null,
-                                onLongClick = { onRowLongClick(app) },
-                                onFocused = { onRowFocused() }
-                            )
-                        }
-                    }
+            }
+        }
+        // Neeche ki rows: bina glass, seedhi wallpaper par
+        itemsIndexed(rows, key = { i, _ -> "row$i" }) { _, row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 27.dp, end = 27.dp, top = 12.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                row.forEach { app ->
+                    AppRectTile(
+                        item = app,
+                        onClick = { onLaunch(app) },
+                        width = 112.dp,
+                        height = 76.dp,
+                        iconSize = 46.dp,
+                        requester = null,
+                        onLongClick = { onRowLongClick(app) },
+                        onFocused = { onRowFocused() }
+                    )
                 }
             }
         }
