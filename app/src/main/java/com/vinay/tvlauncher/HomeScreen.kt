@@ -189,6 +189,7 @@ fun HomeScreen(
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
     val rowApps = apps.filter { it.pkg !in favPkgs }
     val first = remember { FocusRequester() }
+    val rowFirst = remember { FocusRequester() }
     val timeReq = remember { FocusRequester() }
     val profileReq = remember { FocusRequester() }
     var lastTop by remember { mutableStateOf<FocusRequester?>(null) }
@@ -196,7 +197,7 @@ fun HomeScreen(
     var movingPkg by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
     var shelfPkg by remember { mutableStateOf<String?>(null) }
-    var inRows by remember { mutableStateOf(false) }
+    var showRows by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val shelfApp = favApps.firstOrNull { it.pkg == shelfPkg } ?: favApps.firstOrNull()
@@ -236,13 +237,11 @@ fun HomeScreen(
 
     BackHandler(enabled = movingPkg != null) { movingPkg = null }
 
-    // Neeche rows me ho to Back dabane par seedha dock par
-    BackHandler(enabled = inRows && movingPkg == null) {
-        scope.launch {
-            listState.scrollToItem(0)
-            delay(120)
-            runCatching { first.requestFocus() }
-        }
+    // Rows khuli ho to Back dabane par rows band, focus dock par
+    BackHandler(enabled = showRows && movingPkg == null) {
+        runCatching { first.requestFocus() }
+        showRows = false
+        scope.launch { runCatching { listState.scrollToItem(0) } }
     }
 
     Column(
@@ -295,7 +294,7 @@ fun HomeScreen(
 
         Spacer(Modifier.weight(1f))
 
-        if (showShelf && !inRows) {
+        if (showShelf && !showRows) {
             TopShelf(shelfApp)
             Spacer(Modifier.height(14.dp))
         }
@@ -310,18 +309,25 @@ fun HomeScreen(
             rowApps = rowApps,
             listState = listState,
             first = first,
-            inRows = inRows,
+            rowFirst = rowFirst,
+            showRows = showRows,
+            onRevealRows = {
+                showRows = true
+                scope.launch {
+                    delay(150)
+                    runCatching { rowFirst.requestFocus() }
+                }
+            },
             onLaunch = onLaunch,
             onLongClick = { menuApp = it },
             onRowLongClick = { onFavsReorder(favPkgs + it.pkg) },
             onFocused = {
                 shelfPkg = it.pkg
                 lastTop = null
-                inRows = false
+                showRows = false
             },
             onRowFocused = {
                 lastTop = null
-                inRows = true
             }
         )
     }
@@ -349,7 +355,9 @@ fun Dock(
     rowApps: List<AppItem>,
     listState: LazyListState,
     first: FocusRequester,
-    inRows: Boolean,
+    rowFirst: FocusRequester,
+    showRows: Boolean,
+    onRevealRows: () -> Unit,
     onLaunch: (AppItem) -> Unit,
     onLongClick: (AppItem) -> Unit,
     onRowLongClick: (AppItem) -> Unit,
@@ -357,70 +365,80 @@ fun Dock(
     onRowFocused: () -> Unit
 ) {
     val rows = remember(rowApps) { rowApps.chunked(6) }
-    val listHeight = when {
-        rows.isEmpty() -> 140.dp
-        inRows -> 340.dp
-        else -> 240.dp
-    }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(listHeight)
-    ) {
-        // Pehli line: sirf yahi glass + safed line me
-        item(key = "favs") {
+    Column(Modifier.fillMaxWidth()) {
+        // Pehli line: chhota glass + patli safed line (pehle jaisa)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(32.dp))
+                .padding(5.dp)
+                .onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown &&
+                        e.key == Key.DirectionDown &&
+                        !showRows &&
+                        rows.isNotEmpty()
+                    ) {
+                        onRevealRows()
+                        true
+                    } else false
+                }
+        ) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(32.dp))
-                    .padding(5.dp)
+                    .height(124.dp)
+                    .glass(RoundedCornerShape(26.dp), false),
+                contentAlignment = Alignment.CenterStart
             ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .glass(RoundedCornerShape(26.dp), false)
-                        .padding(vertical = 8.dp)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
                 ) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+                    itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
+                        AppRectTile(
+                            item = app,
+                            onClick = { onLaunch(app) },
+                            width = 112.dp,
+                            height = 76.dp,
+                            iconSize = 46.dp,
+                            requester = if (index == 0) first else null,
+                            onLongClick = { onLongClick(app) },
+                            onFocused = { onFocused(app) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Neeche ki rows: Down dabane par hi dikhengi, bina glass
+        if (showRows) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(230.dp)
+            ) {
+                itemsIndexed(rows, key = { i, _ -> "row$i" }) { rowIndex, row ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 27.dp, end = 27.dp, top = 12.dp, bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
+                        row.forEachIndexed { colIndex, app ->
                             AppRectTile(
                                 item = app,
                                 onClick = { onLaunch(app) },
                                 width = 112.dp,
                                 height = 76.dp,
                                 iconSize = 46.dp,
-                                requester = if (index == 0) first else null,
-                                onLongClick = { onLongClick(app) },
-                                onFocused = { onFocused(app) }
+                                requester = if (rowIndex == 0 && colIndex == 0) rowFirst else null,
+                                onLongClick = { onRowLongClick(app) },
+                                onFocused = { onRowFocused() }
                             )
                         }
                     }
-                }
-            }
-        }
-        // Neeche ki rows: bina glass, seedhi wallpaper par
-        itemsIndexed(rows, key = { i, _ -> "row$i" }) { _, row ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 27.dp, end = 27.dp, top = 12.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                row.forEach { app ->
-                    AppRectTile(
-                        item = app,
-                        onClick = { onLaunch(app) },
-                        width = 112.dp,
-                        height = 76.dp,
-                        iconSize = 46.dp,
-                        requester = null,
-                        onLongClick = { onRowLongClick(app) },
-                        onFocused = { onRowFocused() }
-                    )
                 }
             }
         }
