@@ -1,5 +1,9 @@
 package com.vinay.tvlauncher
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -49,6 +54,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -57,6 +63,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -64,6 +71,15 @@ import kotlinx.coroutines.withContext
 
 const val USER_NAME = "Vinay"
 const val USER_FULL_NAME = "Vinay Parmar"
+
+private fun loadHidden(ctx: Context): Set<String> =
+    ctx.getSharedPreferences("tvl_hidden", Context.MODE_PRIVATE)
+        .getStringSet("pkgs", emptySet())?.toSet() ?: emptySet()
+
+private fun saveHidden(ctx: Context, set: Set<String>) {
+    ctx.getSharedPreferences("tvl_hidden", Context.MODE_PRIVATE)
+        .edit().putStringSet("pkgs", set).apply()
+}
 
 fun defaultFavs(apps: List<AppItem>): List<String> {
     val preferred = listOf(
@@ -175,6 +191,99 @@ fun TopShelf(app: AppItem?) {
 }
 
 @Composable
+fun AppMenuItem(
+    text: String,
+    requester: FocusRequester?,
+    onClick: () -> Unit
+) {
+    var f by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+            .onFocusChanged { f = it.isFocused }
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (f) Color.White.copy(alpha = 0.92f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text,
+            color = if (f) Color(0xFF101820) else Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun AppMenu(
+    app: AppItem,
+    isFav: Boolean,
+    canMove: Boolean,
+    onFav: () -> Unit,
+    onMove: () -> Unit,
+    onHide: () -> Unit,
+    onInfo: () -> Unit,
+    onClose: () -> Unit
+) {
+    val firstItem = remember { FocusRequester() }
+    var armed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(100)
+        runCatching { firstItem.requestFocus() }
+    }
+
+    Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier
+                .width(300.dp)
+                .onPreviewKeyEvent { e ->
+                    val isOk = e.key == Key.Enter || e.key == Key.DirectionCenter ||
+                        e.key == Key.NumPadEnter
+                    if (!isOk) {
+                        false
+                    } else if (e.type == KeyEventType.KeyDown) {
+                        // Lamba dabaye rakhne ka repeat band, nayi dabaav par hi chalega
+                        if (e.nativeKeyEvent.repeatCount > 0) {
+                            true
+                        } else {
+                            armed = true
+                            false
+                        }
+                    } else {
+                        // Lamba dabane ka chhodna (key up) ignore
+                        !armed
+                    }
+                }
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF16324F).copy(alpha = 0.94f))
+                .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                app.label,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 18.dp, top = 6.dp, bottom = 6.dp)
+            )
+            AppMenuItem(
+                if (isFav) "Remove from favourites" else "Add to favourites",
+                firstItem
+            ) { onClose(); onFav() }
+            if (canMove) {
+                AppMenuItem("Move", null) { onClose(); onMove() }
+            }
+            AppMenuItem("Hide", null) { onClose(); onHide() }
+            AppMenuItem("App info", null) { onClose(); onInfo() }
+        }
+    }
+}
+
+@Composable
 fun HomeScreen(
     apps: List<AppItem>,
     favPkgs: List<String>,
@@ -186,8 +295,10 @@ fun HomeScreen(
 ) {
     val ctx = LocalContext.current
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
-    val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
-    val rowApps = apps.filter { it.pkg !in favPkgs }
+    var hidden by remember { mutableStateOf(loadHidden(ctx)) }
+    val visible = apps.filter { it.pkg !in hidden }
+    val favApps = favPkgs.mapNotNull { p -> visible.firstOrNull { it.pkg == p } }
+    val rowApps = visible.filter { it.pkg !in favPkgs }
     val favReqs = remember { List(30) { FocusRequester() } }
     val first = favReqs[0]
     val rowFirst = remember { FocusRequester() }
@@ -246,10 +357,19 @@ fun HomeScreen(
         scope.launch { runCatching { listState.scrollToItem(0) } }
     }
 
+    // Menu ka kaam hone ke baad focus dock par
+    fun afterChange() {
+        showRows = false
+        scope.launch {
+            delay(200)
+            runCatching { first.requestFocus() }
+        }
+    }
+
     BackHandler(enabled = movingPkg != null) { movingPkg = null }
 
     // Rows khuli ho to Back dabane par rows band, focus dock par
-    BackHandler(enabled = showRows && movingPkg == null) {
+    BackHandler(enabled = showRows && movingPkg == null && menuApp == null) {
         runCatching { first.requestFocus() }
         showRows = false
         scope.launch { runCatching { listState.scrollToItem(0) } }
@@ -333,7 +453,7 @@ fun HomeScreen(
             onUpToDock = { backToDock() },
             onLaunch = onLaunch,
             onLongClick = { menuApp = it },
-            onRowLongClick = { onFavsReorder(favPkgs + it.pkg) },
+            onRowLongClick = { menuApp = it },
             onFocused = {
                 shelfPkg = it.pkg
                 lastTop = null
@@ -349,15 +469,39 @@ fun HomeScreen(
 
     val ma = menuApp
     if (ma != null) {
-        DockMenu(
+        val isFav = ma.pkg in favPkgs
+        AppMenu(
             app = ma,
-            onMove = {
-                movingPkg = ma.pkg
+            isFav = isFav,
+            canMove = isFav,
+            onFav = {
                 menuApp = null
+                if (isFav) onFavsReorder(favPkgs - ma.pkg)
+                else onFavsReorder(favPkgs + ma.pkg)
+                afterChange()
             },
-            onRemove = {
-                onFavsReorder(favPkgs - ma.pkg)
+            onMove = {
                 menuApp = null
+                movingPkg = ma.pkg
+            },
+            onHide = {
+                menuApp = null
+                val newHidden = hidden + ma.pkg
+                hidden = newHidden
+                saveHidden(ctx, newHidden)
+                if (isFav) onFavsReorder(favPkgs - ma.pkg)
+                afterChange()
+            },
+            onInfo = {
+                menuApp = null
+                runCatching {
+                    val i = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + ma.pkg)
+                    )
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(i)
+                }
             },
             onClose = { menuApp = null }
         )
@@ -383,7 +527,7 @@ fun Dock(
 ) {
     val rows = remember(rowApps) { rowApps.chunked(6) }
     Column(Modifier.fillMaxWidth()) {
-        // Pehli line: chhota glass + patli safed line (pehle jaisa)
+        // Pehli line: chhota glass + patli safed line
         Box(
             Modifier
                 .fillMaxWidth()
@@ -420,55 +564,4 @@ fun Dock(
                             height = 76.dp,
                             iconSize = 46.dp,
                             requester = favReqs.getOrNull(index),
-                            onLongClick = { onLongClick(app) },
-                            onFocused = { onFocused(app) }
-                        )
-                    }
-                }
-            }
-        }
-
-        // Neeche ki rows: Down dabane par hi dikhengi, bina glass
-        if (showRows) {
-            // Glass aur pehli row ke beech gap (rows ke gap jitna)
-            Spacer(Modifier.height(12.dp))
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(230.dp)
-                    .onPreviewKeyEvent { e ->
-                        if (e.type == KeyEventType.KeyDown &&
-                            e.key == Key.DirectionUp &&
-                            focusedRow == 0
-                        ) {
-                            onUpToDock()
-                            true
-                        } else false
-                    }
-            ) {
-                itemsIndexed(rows, key = { i, _ -> "row$i" }) { rowIndex, row ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 27.dp, end = 27.dp, top = 12.dp, bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        row.forEachIndexed { colIndex, app ->
-                            AppRectTile(
-                                item = app,
-                                onClick = { onLaunch(app) },
-                                width = 112.dp,
-                                height = 76.dp,
-                                iconSize = 46.dp,
-                                requester = if (rowIndex == 0 && colIndex == 0) rowFirst else null,
-                                onLongClick = { onRowLongClick(app) },
-                                onFocused = { onRowFocused(rowIndex, colIndex) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+   
