@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -55,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 const val USER_NAME = "Vinay"
@@ -161,7 +166,7 @@ fun TopShelf(app: AppItem?) {
             }
         } else {
             Text(
-                "Favourites me app jodo (All Apps → Settings → Favourite)",
+                "Favourites me app jodo (neeche app par OK lamba dabao)",
                 color = Color.White.copy(alpha = 0.7f),
                 fontSize = 18.sp
             )
@@ -182,6 +187,7 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
+    val rowApps = apps.filter { it.pkg !in favPkgs }
     val first = remember { FocusRequester() }
     val timeReq = remember { FocusRequester() }
     val profileReq = remember { FocusRequester() }
@@ -190,6 +196,9 @@ fun HomeScreen(
     var movingPkg by remember { mutableStateOf<String?>(null) }
     var swallowUp by remember { mutableStateOf(false) }
     var shelfPkg by remember { mutableStateOf<String?>(null) }
+    var inRows by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val shelfApp = favApps.firstOrNull { it.pkg == shelfPkg } ?: favApps.firstOrNull()
     val windowInfo = LocalWindowInfo.current
 
@@ -226,6 +235,15 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = movingPkg != null) { movingPkg = null }
+
+    // Neeche rows me ho to Back dabane par seedha dock par
+    BackHandler(enabled = inRows && movingPkg == null) {
+        scope.launch {
+            listState.scrollToItem(0)
+            delay(120)
+            runCatching { first.requestFocus() }
+        }
+    }
 
     Column(
         Modifier
@@ -277,7 +295,7 @@ fun HomeScreen(
 
         Spacer(Modifier.weight(1f))
 
-        if (showShelf) {
+        if (showShelf && !inRows) {
             TopShelf(shelfApp)
             Spacer(Modifier.height(14.dp))
         }
@@ -288,14 +306,21 @@ fun HomeScreen(
         }
 
         Dock(
-            favApps,
-            onLaunch,
-            onAllApps,
-            first,
+            favs = favApps,
+            rowApps = rowApps,
+            listState = listState,
+            first = first,
+            onLaunch = onLaunch,
             onLongClick = { menuApp = it },
+            onRowLongClick = { onFavsReorder(favPkgs + it.pkg) },
             onFocused = {
                 shelfPkg = it.pkg
                 lastTop = null
+                inRows = false
+            },
+            onRowFocused = {
+                lastTop = null
+                inRows = true
             }
         )
     }
@@ -320,12 +345,16 @@ fun HomeScreen(
 @Composable
 fun Dock(
     favs: List<AppItem>,
-    onLaunch: (AppItem) -> Unit,
-    onAllApps: () -> Unit,
+    rowApps: List<AppItem>,
+    listState: LazyListState,
     first: FocusRequester,
+    onLaunch: (AppItem) -> Unit,
     onLongClick: (AppItem) -> Unit,
-    onFocused: (AppItem) -> Unit = {}
+    onRowLongClick: (AppItem) -> Unit,
+    onFocused: (AppItem) -> Unit,
+    onRowFocused: () -> Unit
 ) {
+    val rows = remember(rowApps) { rowApps.chunked(6) }
     // Bahar ek patli safed line, andar glass dock (photo jaisa)
     Box(
         Modifier
@@ -337,25 +366,54 @@ fun Dock(
             Modifier
                 .fillMaxWidth()
                 .glass(RoundedCornerShape(26.dp), false)
-                .padding(vertical = 14.dp)
+                .padding(vertical = 8.dp)
         ) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (rows.isEmpty()) Modifier else Modifier.height(190.dp))
             ) {
-                itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
-                    AppRectTile(
-                        item = app,
-                        onClick = { onLaunch(app) },
-                        width = 112.dp,
-                        height = 76.dp,
-                        iconSize = 46.dp,
-                        requester = if (index == 0) first else null,
-                        onLongClick = { onLongClick(app) },
-                        onFocused = { onFocused(app) }
-                    )
+                item(key = "favs") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
+                    ) {
+                        itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
+                            AppRectTile(
+                                item = app,
+                                onClick = { onLaunch(app) },
+                                width = 112.dp,
+                                height = 76.dp,
+                                iconSize = 46.dp,
+                                requester = if (index == 0) first else null,
+                                onLongClick = { onLongClick(app) },
+                                onFocused = { onFocused(app) }
+                            )
+                        }
+                    }
                 }
-                item { AllAppsTile(onAllApps, 112.dp, 76.dp) }
+                itemsIndexed(rows, key = { i, _ -> "row$i" }) { _, row ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        row.forEach { app ->
+                            AppRectTile(
+                                item = app,
+                                onClick = { onLaunch(app) },
+                                width = 112.dp,
+                                height = 76.dp,
+                                iconSize = 46.dp,
+                                requester = null,
+                                onLongClick = { onRowLongClick(app) },
+                                onFocused = { onRowFocused() }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
