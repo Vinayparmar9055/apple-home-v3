@@ -188,7 +188,8 @@ fun HomeScreen(
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
     val favApps = favPkgs.mapNotNull { p -> apps.firstOrNull { it.pkg == p } }
     val rowApps = apps.filter { it.pkg !in favPkgs }
-    val first = remember { FocusRequester() }
+    val favReqs = remember { List(30) { FocusRequester() } }
+    val first = favReqs[0]
     val rowFirst = remember { FocusRequester() }
     val timeReq = remember { FocusRequester() }
     val profileReq = remember { FocusRequester() }
@@ -198,6 +199,8 @@ fun HomeScreen(
     var swallowUp by remember { mutableStateOf(false) }
     var shelfPkg by remember { mutableStateOf<String?>(null) }
     var showRows by remember { mutableStateOf(false) }
+    var focusedRow by remember { mutableStateOf(0) }
+    var focusedCol by remember { mutableStateOf(0) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val shelfApp = favApps.firstOrNull { it.pkg == shelfPkg } ?: favApps.firstOrNull()
@@ -233,6 +236,14 @@ fun HomeScreen(
         l.removeAt(i)
         l.add(j, p)
         onFavsReorder(l)
+    }
+
+    // Pehli row se Up: seedha dock ke usi seedh wale app par
+    fun backToDock() {
+        val idx = focusedCol.coerceIn(0, (favApps.size - 1).coerceAtLeast(0))
+        runCatching { favReqs[idx].requestFocus() }
+        showRows = false
+        scope.launch { runCatching { listState.scrollToItem(0) } }
     }
 
     BackHandler(enabled = movingPkg != null) { movingPkg = null }
@@ -308,9 +319,10 @@ fun HomeScreen(
             favs = favApps,
             rowApps = rowApps,
             listState = listState,
-            first = first,
+            favReqs = favReqs,
             rowFirst = rowFirst,
             showRows = showRows,
+            focusedRow = focusedRow,
             onRevealRows = {
                 showRows = true
                 scope.launch {
@@ -318,6 +330,7 @@ fun HomeScreen(
                     runCatching { rowFirst.requestFocus() }
                 }
             },
+            onUpToDock = { backToDock() },
             onLaunch = onLaunch,
             onLongClick = { menuApp = it },
             onRowLongClick = { onFavsReorder(favPkgs + it.pkg) },
@@ -326,8 +339,10 @@ fun HomeScreen(
                 lastTop = null
                 showRows = false
             },
-            onRowFocused = {
+            onRowFocused = { r, c ->
                 lastTop = null
+                focusedRow = r
+                focusedCol = c
             }
         )
     }
@@ -354,15 +369,17 @@ fun Dock(
     favs: List<AppItem>,
     rowApps: List<AppItem>,
     listState: LazyListState,
-    first: FocusRequester,
+    favReqs: List<FocusRequester>,
     rowFirst: FocusRequester,
     showRows: Boolean,
+    focusedRow: Int,
     onRevealRows: () -> Unit,
+    onUpToDock: () -> Unit,
     onLaunch: (AppItem) -> Unit,
     onLongClick: (AppItem) -> Unit,
     onRowLongClick: (AppItem) -> Unit,
     onFocused: (AppItem) -> Unit,
-    onRowFocused: () -> Unit
+    onRowFocused: (Int, Int) -> Unit
 ) {
     val rows = remember(rowApps) { rowApps.chunked(6) }
     Column(Modifier.fillMaxWidth()) {
@@ -402,7 +419,7 @@ fun Dock(
                             width = 112.dp,
                             height = 76.dp,
                             iconSize = 46.dp,
-                            requester = if (index == 0) first else null,
+                            requester = favReqs.getOrNull(index),
                             onLongClick = { onLongClick(app) },
                             onFocused = { onFocused(app) }
                         )
@@ -413,11 +430,22 @@ fun Dock(
 
         // Neeche ki rows: Down dabane par hi dikhengi, bina glass
         if (showRows) {
+            // Glass aur pehli row ke beech gap (rows ke gap jitna)
+            Spacer(Modifier.height(12.dp))
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(230.dp)
+                    .onPreviewKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown &&
+                            e.key == Key.DirectionUp &&
+                            focusedRow == 0
+                        ) {
+                            onUpToDock()
+                            true
+                        } else false
+                    }
             ) {
                 itemsIndexed(rows, key = { i, _ -> "row$i" }) { rowIndex, row ->
                     Row(
@@ -435,7 +463,7 @@ fun Dock(
                                 iconSize = 46.dp,
                                 requester = if (rowIndex == 0 && colIndex == 0) rowFirst else null,
                                 onLongClick = { onRowLongClick(app) },
-                                onFocused = { onRowFocused() }
+                                onFocused = { onRowFocused(rowIndex, colIndex) }
                             )
                         }
                     }
