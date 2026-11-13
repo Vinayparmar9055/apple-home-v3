@@ -3,14 +3,11 @@ package com.vinay.tvlauncher
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -27,16 +24,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,115 +41,6 @@ private val IconPackNames =
 private val IconSizeNames = listOf("Small", "Medium", "Large")
 private val CornerNames = listOf("Sharp", "Normal", "Round")
 private val IntervalOptions = listOf(1, 3, 5, 15)
-
-@Composable
-private fun SRow(
-    title: String,
-    value: String = "",
-    checked: Boolean = false,
-    requester: FocusRequester? = null,
-    onClick: () -> Unit
-) {
-    var focused by remember { mutableStateOf(false) }
-    val base = if (requester != null) Modifier.focusRequester(requester) else Modifier
-    Row(
-        base
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (focused) Color.White else Color.White.copy(alpha = 0.08f))
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            title,
-            color = if (focused) Color.Black else Color.White,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.weight(1f))
-        if (value.isNotEmpty()) {
-            Text(
-                value,
-                color = if (focused) Color(0xFF555555) else Color.White.copy(alpha = 0.6f),
-                fontSize = 15.sp
-            )
-        }
-        if (checked) {
-            Text(
-                "✓",
-                color = if (focused) Color.Black else Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-private fun BlurRow(value: Int, requester: FocusRequester, onChange: (Int) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        Modifier
-            .focusRequester(requester)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (focused) Color.White else Color.White.copy(alpha = 0.08f))
-            .onKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown) {
-                    when (e.key) {
-                        Key.DirectionLeft -> { onChange((value - 1).coerceAtLeast(0)); true }
-                        Key.DirectionRight -> { onChange((value + 1).coerceAtMost(10)); true }
-                        else -> false
-                    }
-                } else false
-            }
-            .onFocusChanged { focused = it.isFocused }
-            .clickable { }
-            .padding(horizontal = 18.dp, vertical = 14.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Blur Value  ◀ ▶",
-                color = if (focused) Color.Black else Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                "$value",
-                color = if (focused) Color(0xFF555555) else Color.White.copy(alpha = 0.6f),
-                fontSize = 15.sp
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(if (focused) Color.Black.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.15f))
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(value / 10f)
-                    .height(4.dp)
-                    .background(if (focused) Color.Black else Color.White)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SLabel(text: String) {
-    Text(
-        text,
-        color = Color.White.copy(alpha = 0.55f),
-        fontSize = 13.sp,
-        modifier = Modifier.padding(start = 6.dp, top = 14.dp, bottom = 6.dp)
-    )
-}
 
 @Composable
 fun SettingsPanel(
@@ -193,6 +73,8 @@ fun SettingsPanel(
     var corner by remember { mutableStateOf(Prefs.tileCorner(ctx)) }
     var labels by remember { mutableStateOf(Prefs.showLabels(ctx)) }
     var topShelf by remember { mutableStateOf(Prefs.topShelf(ctx)) }
+    var hiddenSet by remember { mutableStateOf(loadHidden(ctx)) }
+    val hiddenApps = apps.filter { it.pkg in hiddenSet }
 
     BackHandler {
         when (page) {
@@ -226,11 +108,12 @@ fun SettingsPanel(
                 .padding(20.dp)
         ) {
             val title = when (page) {
-                "main" -> "Settings"
+                "main" -> "Desktop"
                 "appearance" -> "Appearance"
                 "glass" -> "Glass Style"
                 "wallpaper" -> "Wallpaper"
                 "iconpack" -> "Icon Pack"
+                "hidden" -> "Hidden Apps"
                 else -> "StandBy Style"
             }
             Text(
@@ -244,26 +127,46 @@ fun SettingsPanel(
 
             when (page) {
                 "main" -> {
-                    SLabel("Launcher")
-                    SRow("Appearance", "›", requester = first) { page = "appearance" }
+                    SpLabel("Launcher")
+                    SpRow("Appearance", "›", requester = first) { page = "appearance" }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Button Remap", "›") { showRemap = true }
+                    SpRow("Button Remap", "›") { showRemap = true }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Run Setup Again", "›") { onRunSetup() }
+                    SpRow("Run Setup Again", "›") { onRunSetup() }
                     Spacer(Modifier.height(8.dp))
-                    SLabel("TV")
-                    SRow("Android Settings", "›") { onAndroidSettings() }
+                    SpRow("Hidden Apps", "${hiddenApps.size} ›") { page = "hidden" }
+                }
+
+                "hidden" -> {
+                    if (hiddenApps.isEmpty()) {
+                        SpLabel("Koi app hide nahi hai")
+                    } else {
+                        SpLabel("OK dabao to app wapas dikhega")
+                        hiddenApps.forEachIndexed { i, app ->
+                            SpRow(
+                                app.label,
+                                "Show",
+                                requester = if (i == 0) first else null
+                            ) {
+                                val newSet = hiddenSet - app.pkg
+                                hiddenSet = newSet
+                                saveHidden(ctx, newSet)
+                                HiddenStore.rev++
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
                 }
 
                 "appearance" -> {
-                    SLabel("Style")
-                    SRow(
+                    SpLabel("Style")
+                    SpRow(
                         "Glass Style",
                         if (glass == 0) "Liquid Glass ›" else "Frosted Glass ›",
                         requester = first
                     ) { page = "glass" }
                     Spacer(Modifier.height(8.dp))
-                    SRow(
+                    SpRow(
                         "Wallpaper",
                         when {
                             wallCount == 0 -> "Default ›"
@@ -272,62 +175,62 @@ fun SettingsPanel(
                         }
                     ) { page = "wallpaper" }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
+                    SpRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
 
-                    SLabel("Home")
-                    SRow("Top Shelf", if (topShelf) "On" else "Off") {
+                    SpLabel("Home")
+                    SpRow("Top Shelf", if (topShelf) "On" else "Off") {
                         topShelf = !topShelf
                         Prefs.setTopShelf(ctx, topShelf)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Profile Photo", if (hasProfile) "Set ›" else "Not set ›") {
+                    SpRow("Profile Photo", if (hasProfile) "Set ›" else "Not set ›") {
                         showProfileGallery = true
                     }
                     if (hasProfile) {
                         Spacer(Modifier.height(8.dp))
-                        SRow("Remove Profile Photo") {
+                        SpRow("Remove Profile Photo") {
                             ProfilePhoto.clear(ctx)
                             hasProfile = false
                         }
                     }
 
-                    SLabel("Icons")
-                    SRow("Icon Pack", IconPackNames[iconPack.coerceIn(0, 4)] + " ›") {
+                    SpLabel("Icons")
+                    SpRow("Icon Pack", IconPackNames[iconPack.coerceIn(0, 4)] + " ›") {
                         page = "iconpack"
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Icon Size", IconSizeNames[iconSize.coerceIn(0, 2)]) {
+                    SpRow("Icon Size", IconSizeNames[iconSize.coerceIn(0, 2)]) {
                         iconSize = (iconSize + 1) % 3
                         Prefs.setIconSize(ctx, iconSize)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Icons Per Row (All Apps)", "$gridCols") {
+                    SpRow("Icons Per Row (All Apps)", "$gridCols") {
                         gridCols = if (gridCols >= 6) 4 else gridCols + 1
                         Prefs.setGridCols(ctx, gridCols)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Favourites Max", "$dockCount") {
+                    SpRow("Favourites Max", "$dockCount") {
                         dockCount = if (dockCount >= 6) 4 else dockCount + 1
                         Prefs.setDockCount(ctx, dockCount)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Tile Corners", CornerNames[corner.coerceIn(0, 2)]) {
+                    SpRow("Tile Corners", CornerNames[corner.coerceIn(0, 2)]) {
                         corner = (corner + 1) % 3
                         Prefs.setTileCorner(ctx, corner)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("App Names", if (labels) "Always" else "On Focus") {
+                    SpRow("App Names", if (labels) "Always" else "On Focus") {
                         labels = !labels
                         Prefs.setShowLabels(ctx, labels)
                     }
 
-                    SLabel("StandBy")
-                    SRow("Style", StandByNames[standby] + " ›") { page = "standby" }
+                    SpLabel("StandBy")
+                    SpRow("Style", StandByNames[standby] + " ›") { page = "standby" }
                 }
 
                 "iconpack" -> {
                     IconPackNames.forEachIndexed { i, name ->
-                        SRow(
+                        SpRow(
                             name,
                             checked = iconPack == i,
                             requester = if (i == 0) first else null
@@ -340,18 +243,18 @@ fun SettingsPanel(
                 }
 
                 "glass" -> {
-                    SLabel("Glass Style")
-                    SRow("Liquid Glass", checked = glass == 0, requester = first) {
+                    SpLabel("Glass Style")
+                    SpRow("Liquid Glass", checked = glass == 0, requester = first) {
                         glass = 0
                         Prefs.setGlassStyle(ctx, 0)
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Frosted Glass", checked = glass == 1) {
+                    SpRow("Frosted Glass", checked = glass == 1) {
                         glass = 1
                         Prefs.setGlassStyle(ctx, 1)
                     }
-                    SLabel("Blur")
-                    BlurRow(blur, remember { FocusRequester() }) {
+                    SpLabel("Blur")
+                    SpBlurRow(blur, remember { FocusRequester() }) {
                         blur = it
                         Prefs.setBlur(ctx, it)
                         onWallpaperChanged()
@@ -359,8 +262,8 @@ fun SettingsPanel(
                 }
 
                 "wallpaper" -> {
-                    SLabel("Photos (max ${Wallpaper.MAX})")
-                    SRow("Add Photo", "$wallCount/${Wallpaper.MAX}", requester = first) {
+                    SpLabel("Photos (max ${Wallpaper.MAX})")
+                    SpRow("Add Photo", "$wallCount/${Wallpaper.MAX}", requester = first) {
                         if (wallCount >= Wallpaper.MAX) {
                             Toast.makeText(
                                 ctx,
@@ -372,7 +275,7 @@ fun SettingsPanel(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Adjust Photo", "Rotate, Zoom ›") {
+                    SpRow("Adjust Photo", "Rotate, Zoom ›") {
                         if (wallCount > 0) {
                             showEditor = true
                         } else {
@@ -380,8 +283,8 @@ fun SettingsPanel(
                         }
                     }
 
-                    SLabel("Slideshow")
-                    SRow("Slideshow", if (slide) "On" else "Off") {
+                    SpLabel("Slideshow")
+                    SpRow("Slideshow", if (slide) "On" else "Off") {
                         slide = !slide
                         Wallpaper.setSlideshow(ctx, slide)
                         if (slide && wallCount < 2) {
@@ -394,7 +297,7 @@ fun SettingsPanel(
                         onWallpaperChanged()
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Change Every", "$interval min") {
+                    SpRow("Change Every", "$interval min") {
                         val i = IntervalOptions.indexOf(interval)
                         interval = IntervalOptions[(i + 1) % IntervalOptions.size]
                         Wallpaper.setIntervalMin(ctx, interval)
@@ -402,14 +305,14 @@ fun SettingsPanel(
                     }
                     if (wallCount > 1) {
                         Spacer(Modifier.height(8.dp))
-                        SRow("Next Photo") {
+                        SpRow("Next Photo") {
                             Wallpaper.next(ctx)
                             onWallpaperChanged()
                         }
                     }
 
-                    SLabel("Hatao")
-                    SRow("Remove Current Photo", if (wallCount > 0) "" else "Koi nahi") {
+                    SpLabel("Hatao")
+                    SpRow("Remove Current Photo", if (wallCount > 0) "" else "Koi nahi") {
                         if (wallCount > 0) {
                             Wallpaper.removeCurrent(ctx)
                             wallCount = Wallpaper.count(ctx)
@@ -417,7 +320,7 @@ fun SettingsPanel(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    SRow("Remove All Photos", if (wallCount > 0) "" else "Koi nahi") {
+                    SpRow("Remove All Photos", if (wallCount > 0) "" else "Koi nahi") {
                         if (wallCount > 0) {
                             Wallpaper.clear(ctx)
                             wallCount = 0
@@ -428,7 +331,7 @@ fun SettingsPanel(
 
                 else -> {
                     StandByNames.forEachIndexed { i, name ->
-                        SRow(
+                        SpRow(
                             name,
                             checked = standby == i,
                             requester = if (i == 0) first else null
