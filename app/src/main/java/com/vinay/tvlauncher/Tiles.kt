@@ -40,6 +40,12 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -229,8 +235,35 @@ fun AppRectTile(
         label = "labelAlpha"
     ).value
     val base = if (requester != null) Modifier.focusRequester(requester) else Modifier
+    var longFired by remember { mutableStateOf(false) }
     val click = if (onLongClick != null) {
-        Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+        Modifier
+            .onPreviewKeyEvent { e ->
+                val ok = e.key == Key.Enter || e.key == Key.DirectionCenter ||
+                    e.key == Key.NumPadEnter
+                if (!ok) {
+                    false
+                } else if (e.type == KeyEventType.KeyDown) {
+                    if (e.nativeKeyEvent.repeatCount > 0) {
+                        // OK dabaye rakha: popup kholo (sirf ek baar)
+                        if (!longFired) {
+                            longFired = true
+                            onLongClick()
+                        }
+                        true
+                    } else {
+                        longFired = false
+                        false
+                    }
+                } else {
+                    // Chhodte waqt, agar popup khul chuka to click mat karo
+                    if (longFired) {
+                        longFired = false
+                        true
+                    } else false
+                }
+            }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     } else {
         Modifier.clickable(onClick = onClick)
     }
