@@ -59,7 +59,7 @@ fun HomeScreen(
 ) {
     val ctx = LocalContext.current
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
-    var hidden by remember { mutableStateOf(loadHidden(ctx)) }
+    var hidden by remember(HiddenStore.rev) { mutableStateOf(loadHidden(ctx)) }
     val visible = apps.filter { it.pkg !in hidden }
     val favApps = favPkgs.mapNotNull { p -> visible.firstOrNull { it.pkg == p } }
     val rowApps = visible.filter { it.pkg !in favPkgs }
