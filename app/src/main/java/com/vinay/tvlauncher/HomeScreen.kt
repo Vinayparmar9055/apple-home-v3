@@ -290,8 +290,11 @@ fun Dock(
     onRowFocused: (Int, Int) -> Unit
 ) {
     val rows = remember(rowApps) { rowApps.chunked(6) }
-    Column(Modifier.fillMaxWidth()) {
-        // Pehli line: chhota glass + patli safed line
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Bada glass: poori chaudai, pehle jaisa. Andar ke apps uske beech me.
         Box(
             Modifier
                 .fillMaxWidth()
@@ -313,11 +316,14 @@ fun Dock(
                     .fillMaxWidth()
                     .height(124.dp)
                     .glass(RoundedCornerShape(26.dp), false),
-                contentAlignment = Alignment.CenterStart
+                contentAlignment = Alignment.Center
             ) {
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        14.dp,
+                        Alignment.CenterHorizontally
+                    ),
                     contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp)
                 ) {
                     itemsIndexed(favs, key = { _, a -> a.pkg }) { index, app ->
@@ -336,7 +342,7 @@ fun Dock(
             }
         }
 
-        // Neeche ki rows: Down dabane par hi dikhengi, bina glass
+        // Neeche ki rows: Down dabane par hi dikhengi, bina glass, beech me
         if (showRows) {
             Spacer(Modifier.height(12.dp))
             LazyColumn(
@@ -358,8 +364,11 @@ fun Dock(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(start = 27.dp, end = 27.dp, top = 12.dp, bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            14.dp,
+                            Alignment.CenterHorizontally
+                        )
                     ) {
                         row.forEachIndexed { colIndex, app ->
                             AppRectTile(
