@@ -386,7 +386,7 @@ fun ControlCenter(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatusTile(
                         Modifier.width(187.dp).height(60.dp),
-                        Icons.Rounded.Tune, "Launcher", "Settings"
+                        Icons.Rounded.Tune, "Desktop", null
                     ) { onSettings() }
                     StatusTile(
                         Modifier.width(187.dp).height(60.dp),
