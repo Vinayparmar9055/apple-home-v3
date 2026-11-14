@@ -178,7 +178,7 @@ fun HomeScreen(
             )
             Spacer(Modifier.weight(1f))
             ProfileChip(
-                name = USER_FULL_NAME,
+                name = remember(ProfileStore.rev) { loadProfileName(ctx) },
                 onClick = onControl,
                 modifier = Modifier
                     .focusProperties { down = first }
