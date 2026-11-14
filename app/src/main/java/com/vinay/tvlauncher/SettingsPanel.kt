@@ -68,6 +68,8 @@ fun SettingsPanel(
     var wallCount by remember { mutableStateOf(Wallpaper.count(ctx)) }
     var slide by remember { mutableStateOf(Wallpaper.slideshowOn(ctx)) }
     var interval by remember { mutableStateOf(Wallpaper.intervalMin(ctx)) }
+    var bingOn by remember { mutableStateOf(Wallpaper.bingOn(ctx)) }
+    var bingBusy by remember { mutableStateOf(false) }
     var iconPack by remember { mutableStateOf(Prefs.iconStyle(ctx)) }
     var iconSize by remember { mutableStateOf(Prefs.iconSize(ctx)) }
     var gridCols by remember { mutableStateOf(Prefs.gridCols(ctx)) }
@@ -77,6 +79,34 @@ fun SettingsPanel(
     var topShelf by remember { mutableStateOf(Prefs.topShelf(ctx)) }
     var hiddenSet by remember { mutableStateOf(loadHidden(ctx)) }
     val hiddenApps = apps.filter { it.pkg in hiddenSet }
+
+    // Bing se aaj ki photo abhi lao
+    fun fetchBing(turnOn: Boolean) {
+        if (bingBusy) return
+        bingBusy = true
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { Wallpaper.bingRefresh(ctx, true) }
+            bingBusy = false
+            if (ok) {
+                if (turnOn) {
+                    Wallpaper.setBing(ctx, true)
+                    bingOn = true
+                }
+                onWallpaperChanged()
+                Toast.makeText(
+                    ctx,
+                    "Aaj ki Bing photo lag gayi. Roz apne aap badlegi",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(
+                    ctx,
+                    "Photo nahi mili. Internet check karo",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
     BackHandler {
         when (page) {
@@ -140,6 +170,7 @@ fun SettingsPanel(
                     SpRow(
                         "Wallpaper",
                         when {
+                            bingOn -> "Bing Daily ›"
                             wallCount == 0 -> "Default ›"
                             wallCount == 1 -> "Custom ›"
                             else -> "$wallCount photos ›"
@@ -279,8 +310,34 @@ fun SettingsPanel(
                 }
 
                 "wallpaper" -> {
+                    SpLabel("Bing")
+                    SpRow(
+                        "Bing Daily Wallpaper",
+                        when {
+                            bingBusy -> "Laa raha hai..."
+                            bingOn -> "On"
+                            else -> "Off"
+                        },
+                        requester = first
+                    ) {
+                        if (!bingBusy) {
+                            if (bingOn) {
+                                bingOn = false
+                                Wallpaper.setBing(ctx, false)
+                                onWallpaperChanged()
+                            } else {
+                                fetchBing(true)
+                            }
+                        }
+                    }
+                    if (bingOn) {
+                        Spacer(Modifier.height(8.dp))
+                        SpRow("Aaj ki photo abhi lao") { fetchBing(false) }
+                        SpLabel("Bing On hai: apni photo aur slideshow band rahegi")
+                    }
+
                     SpLabel("Photos (max ${Wallpaper.MAX})")
-                    SpRow("Add Photo", "$wallCount/${Wallpaper.MAX}", requester = first) {
+                    SpRow("Add Photo", "$wallCount/${Wallpaper.MAX}") {
                         if (wallCount >= Wallpaper.MAX) {
                             Toast.makeText(
                                 ctx,
