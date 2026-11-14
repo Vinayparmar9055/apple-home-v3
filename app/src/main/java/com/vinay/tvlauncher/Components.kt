@@ -1,6 +1,5 @@
 package com.vinay.tvlauncher
 
-import android.content.Context
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -57,17 +56,15 @@ object ThemeState {
     var dark by mutableStateOf(false)
 }
 
-// Glass Style (Liquid / Frosted), Blur Value, Dark Mode aur ghumne wala rang
+// Glass Style (Liquid / Frosted), Blur Value, Dark Mode aur (agar ON ho to) ghumne wala rang
 // ka asar yahin se sab panels par aata hai
 fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = composed {
     val ctx = LocalContext.current
     val t = Prefs.tick
     val style = remember(t) { Prefs.glassStyle(ctx) }
     val blur = remember(t) { Prefs.blur(ctx) }
-    val shimmerOn = remember(t) {
-        ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
-            .getBoolean("glass_shimmer", true)
-    }
+    // Shimmer pehle se BAND hai; Desktop > Appearance se ON kar sakte ho
+    val shimmerOn = remember(t) { Prefs.shimmer(ctx) }
     val dk = ThemeState.dark
     val frosted = style == 1
 
