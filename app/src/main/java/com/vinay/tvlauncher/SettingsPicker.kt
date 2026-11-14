@@ -39,12 +39,23 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 
-// Aakhri gol button ka pakka kiya hua Settings page yaad rakhta hai
+// Aakhri gol button ka Settings page: seedha DirectDisplayAndSoundActivity
 object DisplaySoundTarget {
+    private const val DIRECT_NAME = "DirectDisplayAndSoundActivity"
+
     private fun sp(ctx: Context) =
         ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
 
+    // Pakka page: DirectDisplayAndSoundActivity (TV me mile to)
+    fun direct(ctx: Context): ComponentName? {
+        return runCatching {
+            findSettingsPages(ctx).firstOrNull { it.shortName == DIRECT_NAME }?.component
+        }.getOrNull()
+    }
+
     fun load(ctx: Context): ComponentName? {
+        val d = direct(ctx)
+        if (d != null) return d
         val s = sp(ctx).getString("ds_target", null) ?: return null
         return ComponentName.unflattenFromString(s)
     }
@@ -123,6 +134,19 @@ private fun PickRow(
 @Composable
 fun SettingsPagePicker(onClose: () -> Unit) {
     val ctx = LocalContext.current
+    val direct = remember { DisplaySoundTarget.direct(ctx) }
+
+    // Pakka page mil gaya: list dikhaye bina seedha kholo
+    if (direct != null) {
+        LaunchedEffect(Unit) {
+            if (!DisplaySoundTarget.open(ctx, direct)) {
+                Toast.makeText(ctx, "Ye page nahi khula", Toast.LENGTH_SHORT).show()
+            }
+            onClose()
+        }
+        return
+    }
+
     val pages = remember { findSettingsPages(ctx) }
     val first = remember { FocusRequester() }
     var current by remember { mutableStateOf(DisplaySoundTarget.load(ctx)?.className) }
