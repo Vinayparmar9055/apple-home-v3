@@ -41,6 +41,8 @@ private val IconPackNames =
 private val IconSizeNames = listOf("Small", "Medium", "Large")
 private val CornerNames = listOf("Sharp", "Normal", "Round")
 private val IntervalOptions = listOf(1, 3, 5, 15)
+// Clock screensaver kitne minute baad: 0 = band
+private val IdleOptions = listOf(0, 1, 3, 5, 10)
 
 @Composable
 fun SettingsPanel(
@@ -64,6 +66,8 @@ fun SettingsPanel(
     var profileName by remember { mutableStateOf(loadProfileName(ctx)) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
+    var shimmer by remember { mutableStateOf(Prefs.shimmer(ctx)) }
+    var idleMin by remember { mutableStateOf(Prefs.idleMin(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
     var wallCount by remember { mutableStateOf(Wallpaper.count(ctx)) }
     var slide by remember { mutableStateOf(Wallpaper.slideshowOn(ctx)) }
@@ -235,6 +239,21 @@ fun SettingsPanel(
                     ) { page = "glass" }
                     Spacer(Modifier.height(8.dp))
                     SpRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
+                    Spacer(Modifier.height(8.dp))
+                    SpRow("Glass Shimmer", if (shimmer) "On" else "Off") {
+                        shimmer = !shimmer
+                        Prefs.setShimmer(ctx, shimmer)
+                    }
+
+                    SpLabel("Screensaver")
+                    SpRow(
+                        "Clock Screensaver",
+                        if (idleMin == 0) "Off" else "$idleMin min"
+                    ) {
+                        val i = IdleOptions.indexOf(idleMin)
+                        idleMin = IdleOptions[(i + 1) % IdleOptions.size]
+                        Prefs.setIdleMin(ctx, idleMin)
+                    }
 
                     SpLabel("Home")
                     SpRow("Top Shelf", if (topShelf) "On" else "Off") {
