@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
+import android.os.Looper
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -54,7 +55,13 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class WallSettings(
     val rotation: Int = 0,   // 0, 90, 180, 270
@@ -78,6 +85,69 @@ object Wallpaper {
     private fun sp(ctx: Context) =
         ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
 
+    // ---------- Bing roz ki photo ----------
+
+    private fun bingFile(ctx: Context) = File(ctx.filesDir, "bing_today.jpg")
+
+    fun bingOn(ctx: Context): Boolean = sp(ctx).getBoolean("wall_bing", false)
+
+    fun setBing(ctx: Context, value: Boolean) {
+        sp(ctx).edit().putBoolean("wall_bing", value).apply()
+    }
+
+    fun bingExists(ctx: Context): Boolean = bingFile(ctx).exists()
+
+    private fun todayKey(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    // Bing se aaj ki photo laata hai. force = true ho to abhi laata hai.
+    // Ye network ka kaam hai, isliye main thread par mat bulao.
+    fun bingRefresh(ctx: Context, force: Boolean): Boolean {
+        val p = sp(ctx)
+        val fresh = p.getString("bing_date", "") == todayKey() && bingFile(ctx).exists()
+        if (!force && fresh) return true
+        val now = System.currentTimeMillis()
+        // Internet na ho to har baar na atke: 30 minute baad dobara koshish
+        if (!force && now - p.getLong("bing_try", 0L) < 30 * 60 * 1000L) return false
+        p.edit().putLong("bing_try", now).apply()
+        return try {
+            val c1 = URL("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-IN")
+                .openConnection() as HttpURLConnection
+            c1.connectTimeout = 8000
+            c1.readTimeout = 8000
+            val json = c1.inputStream.bufferedReader().use { it.readText() }
+            c1.disconnect()
+            val rel = JSONObject(json)
+                .getJSONArray("images")
+                .getJSONObject(0)
+                .getString("url")
+            val full = if (rel.startsWith("http")) rel else "https://www.bing.com$rel"
+
+            val tmp = File(ctx.filesDir, "bing_tmp.jpg")
+            val c2 = URL(full).openConnection() as HttpURLConnection
+            c2.connectTimeout = 8000
+            c2.readTimeout = 15000
+            c2.inputStream.use { inp -> tmp.outputStream().use { out -> inp.copyTo(out) } }
+            c2.disconnect()
+
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(tmp.path, bounds)
+            if (bounds.outWidth <= 0) {
+                tmp.delete()
+                false
+            } else {
+                tmp.copyTo(bingFile(ctx), true)
+                tmp.delete()
+                p.edit().putString("bing_date", todayKey()).apply()
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // ---------- Apni photos ----------
+
     // Purani ek photo wali wallpaper ko nayi list ki pehli photo bana do
     private fun migrate(ctx: Context) {
         val old = File(ctx.filesDir, "wallpaper.jpg")
@@ -98,7 +168,9 @@ object Wallpaper {
 
     fun count(ctx: Context): Int = files(ctx).size
 
-    fun exists(ctx: Context): Boolean = count(ctx) > 0
+    // Bing On ho aur photo aa chuki ho to bhi wallpaper "hai" maano
+    fun exists(ctx: Context): Boolean =
+        count(ctx) > 0 || (bingOn(ctx) && bingExists(ctx))
 
     private fun currentIndex(ctx: Context, n: Int): Int =
         if (n == 0) 0 else sp(ctx).getInt("wall_idx", 0).coerceIn(0, n - 1)
@@ -213,8 +285,19 @@ object Wallpaper {
         return add(ctx, uri)
     }
 
-    // Abhi dikh rahi photo, saved rotation lagakar
+    // Abhi dikh rahi photo. Bing On ho to aaj ki Bing photo, warna apni photo
     fun load(ctx: Context): Bitmap? {
+        if (bingOn(ctx)) {
+            // Roz ek baar nayi photo (main thread par nahi)
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                runCatching { bingRefresh(ctx, false) }
+            }
+            val bf = bingFile(ctx)
+            if (bf.exists()) {
+                val b = runCatching { BitmapFactory.decodeFile(bf.path) }.getOrNull()
+                if (b != null) return b
+            }
+        }
         val f = currentFile(ctx) ?: return null
         val src = runCatching { BitmapFactory.decodeFile(f.path) }.getOrNull() ?: return null
         val rot = settings(ctx).rotation
