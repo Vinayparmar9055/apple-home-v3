@@ -59,7 +59,9 @@ fun SettingsPanel(
     var showEditor by remember { mutableStateOf(false) }
     var showGallery by remember { mutableStateOf(false) }
     var showProfileGallery by remember { mutableStateOf(false) }
+    var showNameEdit by remember { mutableStateOf(false) }
     var hasProfile by remember { mutableStateOf(ProfilePhoto.exists(ctx)) }
+    var profileName by remember { mutableStateOf(loadProfileName(ctx)) }
     var glass by remember { mutableStateOf(Prefs.glassStyle(ctx)) }
     var blur by remember { mutableStateOf(Prefs.blur(ctx)) }
     var standby by remember { mutableStateOf(Prefs.standbyStyle(ctx)) }
@@ -79,14 +81,18 @@ fun SettingsPanel(
     BackHandler {
         when (page) {
             "main" -> onClose()
-            "glass", "standby", "wallpaper", "iconpack" -> page = "appearance"
+            "glass", "standby", "iconpack" -> page = "appearance"
             else -> page = "main"
         }
     }
 
     val first = remember(page) { FocusRequester() }
-    LaunchedEffect(page, showRemap, showEditor, showGallery, showProfileGallery) {
-        if (!showRemap && !showEditor && !showGallery && !showProfileGallery) {
+    LaunchedEffect(
+        page, showRemap, showEditor, showGallery, showProfileGallery, showNameEdit
+    ) {
+        if (!showRemap && !showEditor && !showGallery &&
+            !showProfileGallery && !showNameEdit
+        ) {
             delay(60)
             runCatching { first.requestFocus() }
         }
@@ -109,6 +115,7 @@ fun SettingsPanel(
         ) {
             val title = when (page) {
                 "main" -> "Desktop"
+                "profile" -> "Profile"
                 "appearance" -> "Appearance"
                 "glass" -> "Glass Style"
                 "wallpaper" -> "Wallpaper"
@@ -128,13 +135,43 @@ fun SettingsPanel(
             when (page) {
                 "main" -> {
                     SpLabel("Launcher")
-                    SpRow("Appearance", "›", requester = first) { page = "appearance" }
+                    SpRow("Profile", profileName + " ›", requester = first) { page = "profile" }
+                    Spacer(Modifier.height(8.dp))
+                    SpRow(
+                        "Wallpaper",
+                        when {
+                            wallCount == 0 -> "Default ›"
+                            wallCount == 1 -> "Custom ›"
+                            else -> "$wallCount photos ›"
+                        }
+                    ) { page = "wallpaper" }
+                    Spacer(Modifier.height(8.dp))
+                    SpRow("Appearance", "›") { page = "appearance" }
                     Spacer(Modifier.height(8.dp))
                     SpRow("Button Remap", "›") { showRemap = true }
                     Spacer(Modifier.height(8.dp))
                     SpRow("Run Setup Again", "›") { onRunSetup() }
                     Spacer(Modifier.height(8.dp))
                     SpRow("Hidden Apps", "${hiddenApps.size} ›") { page = "hidden" }
+                }
+
+                "profile" -> {
+                    SpLabel("Profile")
+                    SpRow(
+                        "Profile Photo",
+                        if (hasProfile) "Set ›" else "Not set ›",
+                        requester = first
+                    ) { showProfileGallery = true }
+                    if (hasProfile) {
+                        Spacer(Modifier.height(8.dp))
+                        SpRow("Remove Profile Photo") {
+                            ProfilePhoto.clear(ctx)
+                            hasProfile = false
+                            ProfilePhoto.bump()
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SpRow("Profile Name", profileName + " ›") { showNameEdit = true }
                 }
 
                 "hidden" -> {
@@ -166,32 +203,12 @@ fun SettingsPanel(
                         requester = first
                     ) { page = "glass" }
                     Spacer(Modifier.height(8.dp))
-                    SpRow(
-                        "Wallpaper",
-                        when {
-                            wallCount == 0 -> "Default ›"
-                            wallCount == 1 -> "Custom ›"
-                            else -> "$wallCount photos ›"
-                        }
-                    ) { page = "wallpaper" }
-                    Spacer(Modifier.height(8.dp))
                     SpRow("Dark Mode", if (dark) "On" else "Off") { onDarkChange(!dark) }
 
                     SpLabel("Home")
                     SpRow("Top Shelf", if (topShelf) "On" else "Off") {
                         topShelf = !topShelf
                         Prefs.setTopShelf(ctx, topShelf)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    SpRow("Profile Photo", if (hasProfile) "Set ›" else "Not set ›") {
-                        showProfileGallery = true
-                    }
-                    if (hasProfile) {
-                        Spacer(Modifier.height(8.dp))
-                        SpRow("Remove Profile Photo") {
-                            ProfilePhoto.clear(ctx)
-                            hasProfile = false
-                        }
                     }
 
                     SpLabel("Icons")
@@ -382,6 +399,18 @@ fun SettingsPanel(
                 }
             },
             onClose = { showProfileGallery = false }
+        )
+    }
+    if (showNameEdit) {
+        NameEditDialog(
+            initial = profileName,
+            onSave = { n ->
+                saveProfileName(ctx, n)
+                profileName = loadProfileName(ctx)
+                ProfileStore.rev++
+                showNameEdit = false
+            },
+            onClose = { showNameEdit = false }
         )
     }
     if (showEditor) {
