@@ -1,7 +1,9 @@
 package com.vinay.tvlauncher
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -47,6 +49,72 @@ private fun wizOpen(ctx: Context, intent: Intent) {
     } catch (e: Exception) {
         Toast.makeText(ctx, "Ye option is TV par nahi khul paya", Toast.LENGTH_SHORT).show()
     }
+}
+
+// Accessibility me hamari service ON hai ya nahi
+private fun accessibilityOn(ctx: Context): Boolean {
+    return runCatching {
+        val s = Settings.Secure.getString(
+            ctx.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        s.contains(ctx.packageName)
+    }.getOrDefault(false)
+}
+
+// Accessibility page kholne ke kai tareeke: ek na chale to agla try hota hai
+private fun openAccessibility(ctx: Context) {
+    val tries = ArrayList<Intent>()
+
+    // 1) TV Settings ke andar jo Accessibility wale page hain
+    runCatching {
+        val info = ctx.packageManager.getPackageInfo(
+            "com.android.tv.settings",
+            PackageManager.GET_ACTIVITIES
+        )
+        val found = (info.activities ?: emptyArray())
+            .filter { it.exported && it.name.contains("ccessib", ignoreCase = true) }
+            .sortedBy { it.name.length }
+        for (a in found) {
+            tries.add(Intent().setClassName(a.packageName, a.name))
+        }
+    }
+
+    // 2) Seedha hamari service ka page (naye Android me)
+    runCatching {
+        val svc = ComponentName(ctx, "com.vinay.tvlauncher.HomeKeeperService").flattenToString()
+        tries.add(
+            Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                .putExtra("android.intent.extra.COMPONENT_NAME", svc)
+        )
+    }
+
+    // 3) Normal Android tareeke
+    tries.add(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    tries.add(Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.accessibility.AccessibilityActivity"))
+    tries.add(Intent().setClassName("com.android.settings", "com.android.settings.accessibility.AccessibilitySettings"))
+
+    // 4) Aakhri: TV ki main Settings
+    tries.add(Intent(Settings.ACTION_SETTINGS))
+
+    for (i in tries) {
+        try {
+            ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            Toast.makeText(
+                ctx,
+                "Accessibility me 'Apple Home Helper' ko ON karo",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        } catch (e: Exception) {
+            // agla tareeka try karo
+        }
+    }
+    Toast.makeText(
+        ctx,
+        "TV Settings > Device Preferences > Accessibility me jaake 'Apple Home Helper' ON karo",
+        Toast.LENGTH_LONG
+    ).show()
 }
 
 @Composable
@@ -122,6 +190,7 @@ fun SetupWizard(
     var dock by remember { mutableStateOf(Prefs.dockCount(ctx)) }
     var weatherOn by remember { mutableStateOf(WeatherStore.enabled(ctx)) }
     var showPicker by remember { mutableStateOf(false) }
+    var accOn by remember { mutableStateOf(accessibilityOn(ctx)) }
     val wver = WeatherStore.version
     val cityName = remember(wver) { WeatherStore.city(ctx).name }
     val total = 7
@@ -135,6 +204,14 @@ fun SetupWizard(
         if (!showPicker) {
             delay(60)
             runCatching { first.requestFocus() }
+        }
+    }
+
+    // Accessibility page se wapas aane par ON/OFF dobara dekho
+    LaunchedEffect(step) {
+        while (step == 5) {
+            accOn = accessibilityOn(ctx)
+            delay(1000)
         }
     }
 
@@ -260,8 +337,20 @@ fun SetupWizard(
                     ) { wizOpen(ctx, Intent(Settings.ACTION_HOME_SETTINGS)) }
                     WRow(
                         "Turn On Accessibility",
-                        "Required for Home button catching & button remapping"
-                    ) { wizOpen(ctx, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                        if (accOn) "Already ON · Home button catching & button remapping"
+                        else "Required for Home button catching & button remapping",
+                        checked = accOn
+                    ) {
+                        if (accOn) {
+                            Toast.makeText(
+                                ctx,
+                                "Accessibility pehle se ON hai",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            openAccessibility(ctx)
+                        }
+                    }
                     WRow("Continue") { step = 6 }
                 }
 
