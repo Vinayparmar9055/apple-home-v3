@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +48,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// Neeche ki rows me ek line me kitne app
+private const val ROW_COLS = 6
+
 @Composable
 fun HomeScreen(
     apps: List<AppItem>,
@@ -60,12 +64,25 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val showShelf = remember(Prefs.tick) { Prefs.topShelf(ctx) }
     var hidden by remember(HiddenStore.rev) { mutableStateOf(loadHidden(ctx)) }
+    var orderRev by remember { mutableIntStateOf(0) }
+    val order = remember(orderRev) { OrderStore.list(ctx) }
     val visible = apps.filter { it.pkg !in hidden }
     val favApps = favPkgs.mapNotNull { p -> visible.firstOrNull { it.pkg == p } }
-    val rowApps = visible.filter { it.pkg !in favPkgs }
+    // Rows ke app: jo saved order me hain wo usi kram me, baaki pehle jaise
+    val rowApps = visible.filter { it.pkg !in favPkgs }.let { l ->
+        if (order.isEmpty()) {
+            l
+        } else {
+            l.sortedBy { a ->
+                val i = order.indexOf(a.pkg)
+                if (i < 0) Int.MAX_VALUE else i
+            }
+        }
+    }
     val favReqs = remember { List(30) { FocusRequester() } }
+    val rowReqs = remember { List(200) { FocusRequester() } }
     val first = favReqs[0]
-    val rowFirst = remember { FocusRequester() }
+    val rowFirst = rowReqs[0]
     val timeReq = remember { FocusRequester() }
     val profileReq = remember { FocusRequester() }
     var lastTop by remember { mutableStateOf<FocusRequester?>(null) }
@@ -113,6 +130,28 @@ fun HomeScreen(
         onFavsReorder(l)
     }
 
+    // Neeche ki rows me app hilao: Left/Right = 1 jagah, Up/Down = poori ek row
+    fun moveRow(delta: Int) {
+        val p = movingPkg ?: return
+        val l = rowApps.map { it.pkg }.toMutableList()
+        val i = l.indexOf(p)
+        if (i < 0) return
+        val j = (i + delta).coerceIn(0, l.lastIndex)
+        if (i == j) return
+        l.removeAt(i)
+        l.add(j, p)
+        val rest = OrderStore.list(ctx).filter { it !in l }
+        OrderStore.save(ctx, l + rest)
+        orderRev++
+        // Focus hilaye hue tile ke saath chale
+        scope.launch {
+            delay(80)
+            runCatching { listState.scrollToItem(j / ROW_COLS) }
+            delay(60)
+            runCatching { rowReqs[j].requestFocus() }
+        }
+    }
+
     // Pehli row se Up: seedha dock ke usi seedh wale app par
     fun backToDock() {
         val idx = focusedCol.coerceIn(0, (favApps.size - 1).coerceAtLeast(0))
@@ -151,10 +190,25 @@ fun HomeScreen(
                         true
                     } else false
                 } else if (e.type == KeyEventType.KeyDown) {
+                    val mp = movingPkg
+                    val inDock = mp != null && favPkgs.contains(mp)
                     when (e.key) {
-                        Key.DirectionLeft -> { moveDock(-1); true }
-                        Key.DirectionRight -> { moveDock(1); true }
-                        Key.DirectionUp, Key.DirectionDown -> true
+                        Key.DirectionLeft -> {
+                            if (inDock) moveDock(-1) else moveRow(-1)
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            if (inDock) moveDock(1) else moveRow(1)
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            if (!inDock) moveRow(-ROW_COLS)
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            if (!inDock) moveRow(ROW_COLS)
+                            true
+                        }
                         Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                             movingPkg = null
                             swallowUp = true
@@ -195,7 +249,12 @@ fun HomeScreen(
         }
 
         if (movingPkg != null) {
-            MoveHint("◀ ▶ se tile hilao · OK dabao jab ho jaye")
+            val mp = movingPkg
+            val inDock = mp != null && favPkgs.contains(mp)
+            MoveHint(
+                if (inDock) "◀ ▶ se tile hilao · OK dabao jab ho jaye"
+                else "◀ ▶ ▲ ▼ se tile hilao · OK dabao jab ho jaye"
+            )
             Spacer(Modifier.height(10.dp))
         }
 
@@ -204,7 +263,7 @@ fun HomeScreen(
             rowApps = rowApps,
             listState = listState,
             favReqs = favReqs,
-            rowFirst = rowFirst,
+            rowReqs = rowReqs,
             showRows = showRows,
             focusedRow = focusedRow,
             onRevealRows = {
@@ -237,7 +296,7 @@ fun HomeScreen(
         AppMenu(
             app = ma,
             isFav = isFav,
-            canMove = isFav,
+            canMove = true,
             onFav = {
                 menuApp = null
                 if (isFav) onFavsReorder(favPkgs - ma.pkg)
@@ -278,7 +337,7 @@ fun Dock(
     rowApps: List<AppItem>,
     listState: LazyListState,
     favReqs: List<FocusRequester>,
-    rowFirst: FocusRequester,
+    rowReqs: List<FocusRequester>,
     showRows: Boolean,
     focusedRow: Int,
     onRevealRows: () -> Unit,
@@ -289,7 +348,7 @@ fun Dock(
     onFocused: (AppItem) -> Unit,
     onRowFocused: (Int, Int) -> Unit
 ) {
-    val rows = remember(rowApps) { rowApps.chunked(6) }
+    val rows = remember(rowApps) { rowApps.chunked(ROW_COLS) }
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -377,7 +436,7 @@ fun Dock(
                                 width = 112.dp,
                                 height = 76.dp,
                                 iconSize = 46.dp,
-                                requester = if (rowIndex == 0 && colIndex == 0) rowFirst else null,
+                                requester = rowReqs.getOrNull(rowIndex * ROW_COLS + colIndex),
                                 onLongClick = { onRowLongClick(app) },
                                 onFocused = { onRowFocused(rowIndex, colIndex) }
                             )
