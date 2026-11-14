@@ -1,5 +1,6 @@
 package com.vinay.tvlauncher
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -26,8 +27,17 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 enum class Screen { HOME, SETTINGS, CONTROL, APPS, STANDBY, ANDROID, RECENTS }
+
+// Idle (kuch na dabane) ka hisaab: screensaver ke liye
+object Idle {
+    @Volatile var last: Long = System.currentTimeMillis()
+    @Volatile var active: Boolean = false
+}
 
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
@@ -43,9 +53,21 @@ class MainActivity : ComponentActivity() {
         setContent { LauncherApp(resumeTick, homeTick, recentsTick) }
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        Idle.last = System.currentTimeMillis()
+    }
+
     override fun onResume() {
         super.onResume()
+        Idle.last = System.currentTimeMillis()
+        Idle.active = true
         resumeTick++
+    }
+
+    override fun onPause() {
+        Idle.active = false
+        super.onPause()
     }
 }
 
@@ -60,6 +82,9 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
     var dockCount by remember { mutableStateOf(Prefs.dockCount(ctx)) }
     var wallTick by remember { mutableStateOf(0) }
     val effectiveFavs = favs ?: defaultFavs(apps)
+
+    // Dark mode ka asar glass par
+    LaunchedEffect(dark) { ThemeState.dark = dark }
 
     val bmps by produceState<WallBitmaps?>(initialValue = null, wallTick) {
         value = withContext(Dispatchers.IO) { Wallpaper.loadBitmaps(ctx) }
@@ -79,11 +104,40 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
         }
     }
 
+    // Bing On ho aur din badal jaye to nayi photo: har 30 minute me check
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30 * 60 * 1000L)
+            val stale = withContext(Dispatchers.IO) {
+                val p = ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                p.getBoolean("wall_bing", false) &&
+                    p.getString("bing_date", "") != today
+            }
+            if (stale) wallTick++
+        }
+    }
+
+    // Clock screensaver: Home par kuch der kuch na dabao to StandBy khule
+    LaunchedEffect(screen, setupDone) {
+        while (true) {
+            delay(15_000)
+            if (!setupDone || screen != Screen.HOME || !Idle.active) continue
+            val min = ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
+                .getInt("idle_min", 5)
+            if (min > 0 &&
+                System.currentTimeMillis() - Idle.last > min * 60_000L
+            ) {
+                screen = Screen.STANDBY
+            }
+        }
+    }
+
     LaunchedEffect(resumeTick) {
         apps = withContext(Dispatchers.IO) { loadApps(ctx) }
     }
     LaunchedEffect(homeTick) { screen = Screen.HOME }
-        val standByAtStart = remember { StandByLink.tick }
+    val standByAtStart = remember { StandByLink.tick }
     LaunchedEffect(StandByLink.tick) {
         if (StandByLink.tick != standByAtStart) screen = Screen.STANDBY
     }
@@ -216,7 +270,10 @@ fun LauncherApp(resumeTick: Int, homeTick: Int, recentsTick: Int) {
                 Screen.ANDROID -> ActionScreen(
                     "Android Settings", settingsActions, 3
                 ) { screen = Screen.SETTINGS }
-                Screen.STANDBY -> StandByScreen { screen = Screen.HOME }
+                Screen.STANDBY -> StandByScreen {
+                    Idle.last = System.currentTimeMillis()
+                    screen = Screen.HOME
+                }
                 Screen.RECENTS -> RecentAppsScreen(
                     apps = apps,
                     onLaunch = { launchApp(ctx, it) },
