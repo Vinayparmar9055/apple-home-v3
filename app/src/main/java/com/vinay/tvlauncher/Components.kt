@@ -1,8 +1,15 @@
 package com.vinay.tvlauncher
 
+import android.content.Context
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,9 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -39,31 +48,71 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.max
 
 val Navy = Color(0xFF0A0F1D)
 
-// Glass Style (Liquid / Frosted) aur Blur Value ka asar yahin se sab panels par aata hai
+// Dark mode ka asar glass par: MainActivity ye value badalti hai
+object ThemeState {
+    var dark by mutableStateOf(false)
+}
+
+// Glass Style (Liquid / Frosted), Blur Value, Dark Mode aur ghumne wala rang
+// ka asar yahin se sab panels par aata hai
 fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = composed {
     val ctx = LocalContext.current
     val t = Prefs.tick
     val style = remember(t) { Prefs.glassStyle(ctx) }
     val blur = remember(t) { Prefs.blur(ctx) }
+    val shimmerOn = remember(t) {
+        ctx.getSharedPreferences("apple_home", Context.MODE_PRIVATE)
+            .getBoolean("glass_shimmer", true)
+    }
+    val dk = ThemeState.dark
     val frosted = style == 1
 
-    val a = if (frosted) 0.35f + blur * 0.04f else 0.62f + blur * 0.03f
+    val tr = rememberInfiniteTransition(label = "glassShimmer")
+    val phase = tr.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(16000, easing = LinearEasing),
+            RepeatMode.Reverse
+        ),
+        label = "phase"
+    )
+
+    val a0 = if (frosted) 0.35f + blur * 0.04f else 0.62f + blur * 0.03f
+    val a = if (dk) a0 + 0.12f else a0
     val boost = if (focused) 0.10f else 0f
     val aTop = (a + boost).coerceAtMost(0.97f)
     val aBot = (a + 0.08f + boost).coerceAtMost(0.97f)
 
     val top = if (frosted) {
-        if (focused) Color(0xFFB5BBC6) else Color(0xFF9AA1AD)
+        if (dk) {
+            if (focused) Color(0xFF70757F) else Color(0xFF4E525A)
+        } else {
+            if (focused) Color(0xFFB5BBC6) else Color(0xFF9AA1AD)
+        }
     } else {
-        if (focused) Color(0xFF5A5A62) else Color(0xFF3A3A40)
+        if (dk) {
+            if (focused) Color(0xFF3A3A40) else Color(0xFF1C1C20)
+        } else {
+            if (focused) Color(0xFF5A5A62) else Color(0xFF3A3A40)
+        }
     }
     val bot = if (frosted) {
-        if (focused) Color(0xFF858B96) else Color(0xFF6B717C)
+        if (dk) {
+            if (focused) Color(0xFF4A4E56) else Color(0xFF30333A)
+        } else {
+            if (focused) Color(0xFF858B96) else Color(0xFF6B717C)
+        }
     } else {
-        if (focused) Color(0xFF222226) else Color(0xFF131316)
+        if (dk) {
+            if (focused) Color(0xFF121214) else Color(0xFF060608)
+        } else {
+            if (focused) Color(0xFF222226) else Color(0xFF131316)
+        }
     }
 
     this
@@ -80,6 +129,28 @@ fun Modifier.glass(shape: Shape, focused: Boolean): Modifier = composed {
                 1f to Color.Transparent
             )
         )
+        .drawBehind {
+            if (shimmerOn) {
+                val p = phase.value
+                val w = size.width
+                val h = size.height
+                val r = max(w, h) * 0.6f
+                val c1 = Offset((-0.2f + 1.4f * p) * w, h * 0.35f)
+                val c2 = Offset((1.2f - 1.4f * p) * w, h * 0.75f)
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Color(0x383B82F6), Color.Transparent), c1, r
+                    ),
+                    r, c1
+                )
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Color(0x30A855F7), Color.Transparent), c2, r
+                    ),
+                    r, c2
+                )
+            }
+        }
         .border(
             if (focused) 2.dp else 1.dp,
             Brush.verticalGradient(
