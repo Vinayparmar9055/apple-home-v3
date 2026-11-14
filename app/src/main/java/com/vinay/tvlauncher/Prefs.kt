@@ -41,6 +41,21 @@ object Prefs {
         bump()
     }
 
+    // Glass me ghumne wala rang (shimmer): pehle se band
+    fun shimmer(ctx: Context): Boolean = sp(ctx).getBoolean("glass_shimmer", false)
+
+    fun setShimmer(ctx: Context, value: Boolean) {
+        sp(ctx).edit().putBoolean("glass_shimmer", value).apply()
+        bump()
+    }
+
+    // Clock screensaver kitne minute baad chalu ho (0 = band)
+    fun idleMin(ctx: Context): Int = sp(ctx).getInt("idle_min", 5)
+
+    fun setIdleMin(ctx: Context, value: Int) {
+        sp(ctx).edit().putInt("idle_min", value).apply()
+    }
+
     // 0..10
     fun blur(ctx: Context): Int = sp(ctx).getInt("blur", 6)
 
